@@ -1,0 +1,6 @@
+# Native helpers and plugin packages are generated from the committed source.
+/target/
+/native/target/
+/dist/
+/.tools/
+*.log

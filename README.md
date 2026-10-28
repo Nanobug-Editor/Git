@@ -1,0 +1,103 @@
+# Git for Nanobug
+
+Local candidate 0.1.46 uses the configurable native `Editor` contract (`ui.code_editor ^2`, `editor.layout ^2`). It requires the matching development host, including `ui.canvas >=1.11` and `editor.virtual >=1.2`; content, Undo/Redo and existing plugin data are retained. Build this candidate with that host rather than the historical host revision below.
+
+
+[简体中文](README.zh-CN.md)
+
+A native Git workbench for Nanobug, delivered as an independent WASM plugin. The left panel contains the staging tree and commit form; the bottom panel contains branch trees, a paged commit graph and an inline commit preview. File comparisons stay in main-editor tabs. Conflict resolution opens a separate native window.
+
+This is an initial development candidate. It requires the matching Nanobug host changes, including `ui.code_editor` 1.1; it has not been published to the marketplace. Comparisons use display-only blank-row alignment over the original native editor sessions. Bounded layout failures fall back explicitly to independent panes; native search/code-action panels pause alignment until closed.
+
+## Build
+
+Use Rust 1.95 or newer, the `wasm32-wasip2` target, and a matching Windows x86-64 Nanobug development executable. The host supplies its content-addressed public SDK; do not add a dependency on the host checkout or copy SDK sources here.
+
+```powershell
+$nanobug = 'C:\Projects\RustProjects\Editor\target\debug\editor-app.exe'
+& $nanobug --plugin-cargo ./Cargo.toml check --target wasm32-wasip2
+& $nanobug --plugin-cargo ./Cargo.toml test --lib
+& $nanobug --plugin-package . --output target/packages
+```
+
+The package builder also builds `native/` with Cargo and records the native helper's actual artifact digest. Install the resulting `git-0.1.46.zip` through Nanobug's plugin manager. An installed package does not require Rust or Cargo. Git must already be available through the host's configured tool resolution.
+
+Version 0.1.46 supplies original file paths as language-recognition hints for readonly comparison sources. The host uses enabled language providers and the selected code theme; no source file is opened by this hint. Adjacent-file arrows retain the history panel and tree, prepare independent sources together, and reuse a bounded cache of immutable commit contents. Index and worktree reads remain fresh. History metadata columns follow the native viewport during outer split resizing without waiting for a guest redraw. Installation permissions are unchanged.
+
+Version 0.1.44 uses an IDEA-style commit range for both tracked and unversioned files. Checking or clearing a file/directory updates local inclusion immediately without Git or native document requests; initially no files are included. Commit and Commit and Push freeze the range/message, check selected unsaved buffers and Git prerequisites, then commit only those whole files from disk. Selected unversioned files are added at submission; excluded staged content is preserved. Later choices/draft edits apply to a subsequent commit. Commit failure never pushes; push failure retains the local commit. This supersedes the checkbox-to-index behavior below and does not change host APIs or installation permissions.
+
+Version 0.1.42 uses generic `ui.canvas >=1.6` native column resizing. Transparent boundaries show the horizontal resize cursor. Text follows native pointer frames without waiting for WASM; release submits final widths once, preserving commit selection, scroll and the staging scene. Captions use native clipping while dragging; permissions are unchanged and the matching host is required.
+
+Version 0.1.41 presents history files below an initially expanded total, counts all unique descendant files and compacts single-directory chains. UI typography and muted totals use the generic `ui.tree >=1.8` contract. Original Git paths and stable terminal-directory IDs drive comparisons and refreshes; unchanged observations preserve native disclosure, selection and scroll. Permissions and wire protocol remain unchanged.
+
+Version 0.1.40 makes the main Git panel occupy its current side exclusively, using the public `ui.panels >=1.2` contract. The staging/commit panel and separate work windows keep their existing declarations. With the matching host, dragging onto or from an exclusive tool window previews the whole destination region and replaces its displayed window while retaining the previous window's state. Permissions and wire protocol remain unchanged.
+
+Version 0.1.39 opens changed worktree files only in a comparison preview, using generic `editor.documents >=1.2` source preparation. Existing file tabs and unsaved edits keep their native session. Clean comparison-only sources are reclaimed; closing an edited comparison keeps its unsaved source. The matching host compares LF/CRLF content without reporting unchanged lines as edits while retaining original byte offsets and missing-final-newline differences. Permissions are unchanged.
+
+Version 0.1.38 places the checked-out local branch first among its own siblings, before directories, with an amber marker for each appearance. Nested branches keep their parent; lazy pages and refresh patches use the same order. History labels remain right-aligned; bold authors are now left-aligned. Automatic author/time widths use generic native sample measurements (`ui.canvas >=1.5`), with eight pixels between shared metadata regions. New authors are measured in bounded batches, ordinary scrolling reuses the result, and manual column widths remain authoritative. This supersedes the centered author in 0.1.34 and requires the matching host; permissions are unchanged.
+
+Version 0.1.38 keeps Unversioned checkboxes as local selections: checking a file or collapsed directory does not stage it or move it to Changes. Tracked checkboxes provide immediate feedback and coalesce rapid choices behind guarded, serialized index writes; failures restore the observed index state. The commit form removes the staged count and operation-feedback area, insets its divider, and grows the message field from two to four native visual lines with internal scrolling. Commit uses the same shared outlined primary Button as plugin installation. This supersedes the earlier feedback-area and unversioned-checkbox behavior below, requires `ui.native >=1.2` and `ui.styles`, and keeps installation permissions unchanged.
+
+Version 0.1.37 automatically loads bounded history pages as scrolling approaches the loaded tail or a taller viewport needs more rows. Continue scrolling to reach the oldest locally available commit in the selected history. Requests coalesce behind existing work and stop at the observed end; selection, scroll position and the commit draft remain stable. No host API or permission changes are required.
+
+Version 0.1.34 uses generic native text regions (`ui.canvas >=1.4`) for right-aligned branch labels, centered bold authors and left-aligned timestamps. Actual font shaping determines their position, with clipping and ellipsis within each resizable column. Transparent dividers, scroll identity and the commit form remain stable. A matching host update is required; permissions are unchanged.
+
+Version 0.1.33 keeps the commit tree visible and scrollable while checkbox staging runs. The feedback area retains its height, so operation completion or an index-lock error does not move the tree or commit draft. Index writes remain serialized and retain dirty-buffer and stale-index checks. No host API or permission changes are required.
+
+Version 0.1.32 adds eight independent graph colors for each appearance under Settings → Plugins → Git. Enter `#RRGGBB` and Apply, or Reset an individual slot to its default. Values persist in user settings; project overrides and invalid colors are rejected. The existing `configuration >=1.1` hot-apply hook updates visible graph colors without restarting Git, resetting selection/scroll or replacing the commit form. Editing the inactive theme takes effect when that theme is selected. No new host API or permission is added.
+
+Version 0.1.31 distinguishes topology strands with eight light/dark theme colors, shared by their lines and commit nodes. Ordinary commits use solid dots; multi-parent merge commits use hollow rings, with incident lines ending at the ring so its center reveals the actual row background. First-parent ancestry keeps its color, additional merge parents get independent colors, and lane compaction, page loading and scrolling preserve strand identity. Active strands use different slots while the palette has space; larger frontiers reuse colors. It uses the existing canvas capability with no new host API or permission.
+
+Version 0.1.30 groups branch labels, author and time compactly around the bold author. Drag any of the three invisible column boundaries to resize adjacent text columns; no separator line is painted. Widths remain through branch changes and hot-update snapshots; resizing does not select a commit or change vertical scroll. List timestamps use `YYYY-MM-DD HH:mm:ss`, retaining the commit's original wall-clock fields. This uses the existing `ui.canvas >=1.3` host and adds no capability or permission.
+
+Version 0.1.29 uses generic `ui.canvas >=1.3` retained scroll buffers: native frames move cached rows immediately while guest drawing replies are in flight. Commit and history retain independent scenes, diagnostics and queued file selections. Staging/unstaging refreshes file status without reloading history; actual repository changes still update affected data. The matching host is required; permissions are unchanged.
+
+Version 0.1.28 keeps operation feedback compact and opens complete diagnostics in a scrollable details dialog. Directory checkboxes still stage/unstage every descendant in one guarded batch; a competing index lock preserves actual checkbox state and can be retried after the other operation finishes. Passive Git queries disable optional index writes so canceling a refresh cannot interrupt a stat-cache write. Required mutation locks remain enforced; the plugin never deletes another operation's lock file. No new host capability or permission is required.
+
+Version 0.1.27 renames the staging panel to Commit and adopts a compact toolbar, checkable Changes/Unversioned file tree, and fixed message/footer layout. Checking stages immediately; unchecking unstages immediately, without changing worktree bytes. Partially staged files appear once with a mixed checkbox. Directory checks include unloaded descendants and recheck both native unsaved buffers and index observations before writing. Commit consumes the index only. Existing hunk actions remain available from the toolbar. The package requires the generic `ui.tree >=1.7` capability; installation permissions are unchanged.
+
+Version 0.1.26 keeps scrolling proportional to the visible rows. Appended pages extend a chunked topology cache and OID index without copying all loaded records; unchanged periodic observations read one page when ref/HEAD ownership is still valid. Explicit refreshes still recheck the loaded range. It retains the 0.1.25 public file-color and workspace-title capabilities and their settings; no new permission or host API is added.
+
+Version 0.1.24 uses the public SDK ResourceGroup to own its thirty-second refresh timer and document subscription. Repeated activation reuses one observer pair; failed initialization releases earlier resources and retains any failed cleanup for an explicit retry. Only matching notifications affect Git. Hidden panels keep document-closure observation so retained comparison sources can be released. Host retirement still reclaims the instance on disable, update or a trap; Drop does not call the host. Protocol 7, capability requirements and permissions are unchanged. Install/update compatible packages in the running host while retaining native documents and Undo/Redo.
+
+Version 0.1.23 requires `ui.tree >=1.5`: double-click a branch to select it and filter history; a single click only focuses the tree. Hover uses the native gray theme color and remains on the context-menu target while its menu is open, preserving the current selection. File previews retain single-click selection. Checking out a branch remains an explicit reviewed menu action; late history replies preserve its confirmation and other open dialogs.
+
+History scrolling requires `ui.canvas >=1.3`. Content epochs preserve queued wheel deltas across painting; only commit-content replacement rotates that identity. Topology is cached, text covers the viewport plus bounded overscan, and stable vector tiles reuse host pixels while native frames move the retained drawing. Other native input retains exact scene validation.
+
+The staging and Git window controls use the supplied commit and branch SVG artwork. Commit details and conflict resolution open from Git actions and do not add window-control buttons. This requires a host providing `ui.panels >=1.1`.
+
+Git operations live in the branch tree's native right-click menu; the top toolbar and global target input are removed. Left-click filters history. Right-click captures that branch's full ref; advanced-operation dialogs prefill it and still allow explicit revisions or ordered cherry-pick commits before the impact review. New branch creation asks for a name and retains its source. Pull/push are enabled only on the checked-out branch. Direct checkout of a remote ref is disabled. Contextually unavailable actions are grey and rejected again at invocation. This candidate requires `ui.tree >=1.4` and `plugin.commands`; no new permission is added.
+
+Branch-tree directories use the same light/dark folder SVGs as Explorer's default artwork; actual refs use the supplied branch SVG. This requires the existing `ui.icons` capability and `assets.read` permission for packaged artwork. The plugin manager confirms the added grant on update. A matching host preserves literal folder colors while currentColor branch artwork follows the row foreground.
+
+## Behavior and permissions
+
+Version 0.1.22 keeps bounded first-page and immutable preview caches in the independent plugin. Returning to a visited branch publishes immediately without Git child queries. A cold branch projects known ancestry while a bounded Git read completes; the admitted canvas stays visible and readonly queries do not disable other controls. Ref OIDs/HEAD changes invalidate log caches, and superseded filter receipts are rejected. It adds no host API or installation permission.
+
+The matching host shows one collapse/expand toggle after the four navigation arrows. Any hidden unchanged region makes its next action expand all; otherwise it collapses all. Individual disclosures and retained tabs update that same control.
+
+Version 0.1.20 requires `ui.tree >=1.4`. Selecting a branch keeps the complete log and commit preview visible until replacement reads finish. Changed status, refs and commit-file lists use atomic deltas for cached nodes and directory prefixes; unchanged pages, native selection, expansion and scrolling are retained. Files and their complete message publish together. The plugin remains independent and adds no installation permission.
+
+Version 0.1.19 requires the matching host's `editor.diff >=1.4`. Comparisons start expanded. Collapse/expand toolbar icons are copies of Explorer's artwork stored in this package. Folding keeps three original context lines at each edge of exact common regions; a disclosure expands one region across both/all three panes. Source text, line numbers, selection and Undo remain native, and tab activation retains choices. No installation permission is added.
+
+Version 0.1.18 requires the matching host's `editor.diff >=1.3`. The comparison toolbar uses left/right arrows for adjacent changed files in the original commit and up/down arrows for differences in the current file, with localized hover/accessibility names. First/last files disable the corresponding arrow. Pinned views retain their original OIDs, parent choices and file order even when another log entry is selected. The unified-view and synchronized-scrolling buttons are removed; panes scroll together by default. The plugin owns the file sequence through public typed commands; no installation permission is added.
+
+Version 0.1.17 requires the matching host's `ui.tree >=1.3`. On first load the branch tree reveals/selects the checked-out branch, including nested and paged paths, without stealing focus or filtering the initial all-ref history. The first commit is selected and its complete files/message load inline. Explicit branch filters select their first commit; background refresh and hide/show retain subsequent user choices. Changed-file names are green for additions, red for deletions and blue for modifications, with localized status tooltips. Merge previews retain the union of parent changes; mixed states are modified. Rename detection is disabled for this view so both deleted and added paths remain visible.
+
+Version 0.1.16 removes the history dock's outer inset and gives each right-hand preview pane 8px of content padding. With the matching host, trees without supplied artwork use Explorer's folder and file-type icons, and an empty header command menu has no button. Branch pagination and retained native interaction state are unchanged.
+
+The history dock contains branches, commit rows and a right-hand preview split into changed files above and the full commit message/metadata below. Selecting a commit never opens a separate details window. Clicking a changed file opens a readonly main-editor comparison tab: parent/commit for ordinary commits, or parent 1/result/parent 2 for merge commits; octopus merges expose explicit parent choices. Pinned tabs retain their immutable sources while preview selection changes. This requires `editor.diff >=1.2`. There is no search row, table heading or footer; topology retains its 16px left inset. More commits, repository information and Stash list are available from the branch context menu.
+
+Open a single repository root or a linked worktree root. Opening only a nested directory is rejected explicitly. The plugin uses public process, workspace, document, UI, timer and private-storage capabilities. Its native rebase editor helper is a declared, digest-verified dependency installed in the plugin's private version directory.
+
+Explicit staging/hunk actions operate on Git's index; commit checkboxes independently select whole files for submission. Selected files with unsaved native changes must be saved and reviewed before committing. Unselected files and their staged content are preserved. Local refresh does not fetch from the network. Remote operations use the existing Git authentication setup; the plugin does not store credentials.
+
+Background local checks run at least thirty seconds apart and yield while the user is interacting. They do not disable the controls or replace an unchanged view. Manual refresh, activation, saved documents and completed Git operations still request prompt updates.
+
+An unchanged periodic observation keeps the existing native controls and loaded tree pages. Current user input cancels optional read-only observation before it is handled; actual Git changes and errors still publish normally. Staging, branches and commit-detail files invalidate only when their own source changes.
+
+Version 0.1.15 requires `ui.tree >=1.2` in the matching host. Selecting branches, hiding/showing the staging or Git panels, and changing command availability update cached node metadata without reloading branch pages. Expansion, selection and scrolling remain native. Changed refs/current branch still invalidate the affected source; worktree-only changes update Stash availability without reloading branches. No new installation permission is added.
+
+The plugin supports file and hunk staging, branches, fetch/pull/push, stash, merge, reset, cherry-pick and bounded interactive rebase plans. Interactive rebase supports reorder, reword, squash, fixup and drop; it does not accept arbitrary `exec` commands or reconstruct merge topology. Destructive operations show a preview and require an explicit action. Published-history updates use an explicit expected remote OID with force-with-lease.
+
+Binary and non-UTF-8 conflicts use explicit whole-version choices. Oversized comparisons and plans show their limits rather than applying truncated content. Closing a conflict window keeps the native result document and its Undo history; it does not abort the Git operation. Review `docs/plugins/specs/git-plugin.md` and the verification record in the host checkout for the agreed scope and actual validation status.

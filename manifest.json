@@ -1,0 +1,91 @@
+{
+  "id": "git",
+  "name": "Git",
+  "version": "0.1.46",
+  "protocol": 7,
+  "component": "git.wasm",
+  "permissions": ["process.exec", "process.service.rebase", "dependencies.prepare", "ui.panels", "assets.read", "editor.read", "editor.write", "workspace.read", "workspace.write", "storage"],
+  "storage_limit": 524288,
+  "activation": {"background":{"purpose":"Observe local repository state for file colors and the current-branch title entry / 为文件颜色和顶部分支入口观察本地仓库状态"}},
+  "api": {
+    "base": "^1",
+    "required": {
+      "configuration": ">=1.1,<2",
+      "lifecycle.activation": "^1",
+      "explorer.decorations": "^1",
+      "ui.workspace": "^1",
+      "process": ">=1.8,<2",
+      "dependencies": "^1",
+      "storage.private": ">=1.1,<2",
+      "ui.windows": "^1",
+      "ui.code_editor": "^2",
+      "ui.visibility": "^1",
+      "editor.actions": "^1",
+      "ui.native": ">=1.2,<2",
+      "ui.styles": "^1",
+      "ui.panels": ">=1.2,<2",
+      "ui.tree": ">=1.8,<2",
+      "ui.icons": "^1",
+      "plugin.commands": "^1",
+      "ui.canvas": ">=1.11,<2",
+      "ui.richtext": "^1",
+      "ui.collections": "^1",
+      "editor.documents": ">=1.2,<2",
+      "editor.virtual": ">=1.2,<2",
+      "editor.diff": ">=1.4,<2",
+      "editor.edit": ">=1.1,<2",
+      "editor.layout": "^2",
+      "lifecycle.timers": "^1"
+    }
+  },
+  "settings_hook": true,
+  "settings": {
+    "graph.colors.dark.1": {"title":"拓扑图 · 深色 · 颜色 1 (#RRGGBB) / Graph · Dark · Color 1", "value_type":{"kind":"string","max_length":7}, "default":"#70a5ff", "scope":"user", "apply":"hot_apply"},
+    "graph.colors.dark.2": {"title":"拓扑图 · 深色 · 颜色 2 (#RRGGBB) / Graph · Dark · Color 2", "value_type":{"kind":"string","max_length":7}, "default":"#ffb05c", "scope":"user", "apply":"hot_apply"},
+    "graph.colors.dark.3": {"title":"拓扑图 · 深色 · 颜色 3 (#RRGGBB) / Graph · Dark · Color 3", "value_type":{"kind":"string","max_length":7}, "default":"#67cd87", "scope":"user", "apply":"hot_apply"},
+    "graph.colors.dark.4": {"title":"拓扑图 · 深色 · 颜色 4 (#RRGGBB) / Graph · Dark · Color 4", "value_type":{"kind":"string","max_length":7}, "default":"#bd95ff", "scope":"user", "apply":"hot_apply"},
+    "graph.colors.dark.5": {"title":"拓扑图 · 深色 · 颜色 5 (#RRGGBB) / Graph · Dark · Color 5", "value_type":{"kind":"string","max_length":7}, "default":"#ff89bb", "scope":"user", "apply":"hot_apply"},
+    "graph.colors.dark.6": {"title":"拓扑图 · 深色 · 颜色 6 (#RRGGBB) / Graph · Dark · Color 6", "value_type":{"kind":"string","max_length":7}, "default":"#5fd0d5", "scope":"user", "apply":"hot_apply"},
+    "graph.colors.dark.7": {"title":"拓扑图 · 深色 · 颜色 7 (#RRGGBB) / Graph · Dark · Color 7", "value_type":{"kind":"string","max_length":7}, "default":"#dac65d", "scope":"user", "apply":"hot_apply"},
+    "graph.colors.dark.8": {"title":"拓扑图 · 深色 · 颜色 8 (#RRGGBB) / Graph · Dark · Color 8", "value_type":{"kind":"string","max_length":7}, "default":"#ff8c81", "scope":"user", "apply":"hot_apply"},
+    "graph.colors.light.1": {"title":"拓扑图 · 浅色 · 颜色 1 (#RRGGBB) / Graph · Light · Color 1", "value_type":{"kind":"string","max_length":7}, "default":"#2563eb", "scope":"user", "apply":"hot_apply"},
+    "graph.colors.light.2": {"title":"拓扑图 · 浅色 · 颜色 2 (#RRGGBB) / Graph · Light · Color 2", "value_type":{"kind":"string","max_length":7}, "default":"#c05a00", "scope":"user", "apply":"hot_apply"},
+    "graph.colors.light.3": {"title":"拓扑图 · 浅色 · 颜色 3 (#RRGGBB) / Graph · Light · Color 3", "value_type":{"kind":"string","max_length":7}, "default":"#16833d", "scope":"user", "apply":"hot_apply"},
+    "graph.colors.light.4": {"title":"拓扑图 · 浅色 · 颜色 4 (#RRGGBB) / Graph · Light · Color 4", "value_type":{"kind":"string","max_length":7}, "default":"#8b42c9", "scope":"user", "apply":"hot_apply"},
+    "graph.colors.light.5": {"title":"拓扑图 · 浅色 · 颜色 5 (#RRGGBB) / Graph · Light · Color 5", "value_type":{"kind":"string","max_length":7}, "default":"#ca3478", "scope":"user", "apply":"hot_apply"},
+    "graph.colors.light.6": {"title":"拓扑图 · 浅色 · 颜色 6 (#RRGGBB) / Graph · Light · Color 6", "value_type":{"kind":"string","max_length":7}, "default":"#07858d", "scope":"user", "apply":"hot_apply"},
+    "graph.colors.light.7": {"title":"拓扑图 · 浅色 · 颜色 7 (#RRGGBB) / Graph · Light · Color 7", "value_type":{"kind":"string","max_length":7}, "default":"#8b7000", "scope":"user", "apply":"hot_apply"},
+    "graph.colors.light.8": {"title":"拓扑图 · 浅色 · 颜色 8 (#RRGGBB) / Graph · Light · Color 8", "value_type":{"kind":"string","max_length":7}, "default":"#d64539", "scope":"user", "apply":"hot_apply"}
+  },
+  "services": {
+    "rebase": {
+      "program":"nanobug-git-rebase",
+      "platforms":["windows-x86_64"],
+      "args":[],
+      "installation": {
+        "executable":"helper/nanobug-git-rebase.exe",
+        "artifacts":[{"id":"helper","version":"0.1.1","platform":"windows-x86_64","sha256":"0000000000000000000000000000000000000000000000000000000000000000","source":{"kind":"package","path":"native/nanobug-git-rebase.exe"},"format":{"kind":"file","path":"nanobug-git-rebase.exe"}}]
+      }
+    }
+  },
+  "panels": [
+    {"id":"staging","title":"提交 / Commit","position":"left","status_order":0,"icon_light":"icons/staging.svg","icon_dark":"icons/staging.svg"},
+    {"id":"history","title":"Git","position":"bottom","exclusive":true,"status_order":1,"icon_light":"icons/git.svg","icon_dark":"icons/git.svg"},
+    {"id":"conflicts","title":"解决冲突 / Resolve conflicts","position":"window","default_visible":false,"show_in_window_controls":false},
+    {"id":"commit-details","title":"提交详情 / Commit details","position":"window","default_visible":false,"show_in_window_controls":false}
+  ],
+  "commands": [
+    {"id":"workspace-action","title":"Git: 工作区入口 / Workspace entry","signature":{"permissions":["process.exec","ui.panels","assets.read","editor.read","editor.write","workspace.read","storage"],"parameters":{"type":"record","fields":{"action":{"type":"string","max_bytes":64},"target":{"type":"string","max_bytes":4096}}},"result":{"type":"null"}}},
+    {"id":"history-adjacent","title":"Git: 相邻改动文件 / Adjacent changed file","signature":{"permissions":["process.exec","ui.panels","assets.read","editor.read","workspace.read","storage"],"parameters":{"type":"record","fields":{"view":{"type":"string","max_bytes":128},"path":{"type":"string","max_bytes":4096}}},"result":{"type":"null"}}},
+    {"id":"branch-context","title":"Git: 分支右键操作 / Branch context action","signature":{"permissions":["process.exec","ui.panels","assets.read","editor.read","editor.write","workspace.read","storage"],"parameters":{"type":"record","fields":{"action":{"type":"string","max_bytes":64},"target":{"type":"string","max_bytes":4096}}},"result":{"type":"null"}}},
+    {"id":"rebase-plan","title":"Git: 整理提交… / Interactive rebase…"},
+    {"id":"diff","title":"Git: 查看工作区差异 / Compare worktree"},
+    {"id":"diff-index","title":"Git: 查看暂存差异 / Compare index"},
+    {"id":"refresh","title":"Git: 刷新 / Refresh"},
+    {"id":"stage","title":"Git: 暂存所选文件 / Stage selected file"},
+    {"id":"unstage","title":"Git: 取消暂存 / Unstage selected file"},
+    {"id":"commit","title":"Git: 提交暂存内容 / Commit staged"},
+    {"id":"resolve-file","title":"Git: 解决所选冲突 / Resolve selected conflict"},
+    {"id":"refresh-hunks","title":"Git: 刷新所选文件差异块 / Refresh selected hunks"}
+  ]
+}
