@@ -52,12 +52,19 @@ impl State {
                 .into_iter()
                 .map(|(id, path)| (format!("{name}:{id}"), path)),
         );
+        if name == "files" && !self.history_files_tree_initialized {
+            tree::set_expanded(
+                self.trees[name].clone(),
+                vec![format!("d{}", node_id(""))],
+                true,
+            )?;
+            self.history_files_tree_initialized = true;
+        }
         Ok(())
     }
 
-    /// Compare the already loaded window with its new directory, without loading unrequested
-    /// descendants. Stable IDs and bounded loaded prefixes use the atomic patch quota; ordinary
-    /// lazy replies continue to obey their smaller per-page byte/count limits.
+    /// Publish all immutable history metadata; mutable providers retain their loaded window.
+    /// Stable IDs and both publication modes obey the same atomic patch and retained-tree quotas.
     fn tree_patch(
         &self,
         name: &str,
@@ -70,8 +77,14 @@ impl State {
         api::Failure,
     > {
         let mut patch = tree::Patch::default();
-        let Some(previous) = self.tree_pages.get(name) else {
-            return Ok((patch, BTreeMap::new(), BTreeMap::new()));
+        // Historical metadata is already complete and immutable. Admit its entire forest once,
+        // while mutable status/ref providers continue preserving their requested page windows.
+        let complete = name == "files";
+        let empty = BTreeMap::new();
+        let previous = match self.tree_pages.get(name) {
+            Some(previous) => previous,
+            None if complete => &empty,
+            None => return Ok((patch, BTreeMap::new(), BTreeMap::new())),
         };
         let directory = self.tree_directory(name);
         let mut pages = BTreeMap::new();
@@ -80,8 +93,11 @@ impl State {
         // Visit only the new reachable hierarchy, so an orphaned old parent cannot emit it a second time.
         let mut pending = VecDeque::from([None]);
         while let Some(parent) = pending.pop_front() {
-            let Some(cached) = previous.get(&parent) else {
-                continue;
+            let unloaded = CachedBranch::default();
+            let cached = match previous.get(&parent) {
+                Some(cached) => cached,
+                None if complete => &unloaded,
+                None => continue,
             };
             let prefix = match &parent {
                 None => String::new(),
@@ -106,13 +122,21 @@ impl State {
             let candidates = self.tree_entries(name, current, &prefix, parent.is_none());
             // Keep the loaded window size. A newly enlarged complete directory starts another
             // ordinary bounded page rather than materializing every new path in the repository.
-            let limit = if cached.next.is_some() {
+            let limit = if complete {
+                usize::MAX
+            } else if cached.next.is_some() {
                 cached.nodes.len().max(1)
             } else {
                 cached.nodes.len().max(128)
             };
             let mut nodes = Vec::new();
             for entry in candidates.iter().take(limit) {
+                if paths.len() >= tree::MAX_NODES {
+                    return Err(api::Failure::new(
+                        api::ErrorCode::LimitExceeded,
+                        "Complete changed-file tree exceeds the native node budget",
+                    ));
+                }
                 let node = entry.node(self, name);
                 paths.insert(node.id.clone(), entry.path.clone());
                 nodes.push(node);
@@ -136,12 +160,13 @@ impl State {
                     .cloned(),
             );
             let children = nodes.iter().map(|node| node.id.clone()).collect::<Vec<_>>();
-            if children
-                != cached
-                    .nodes
-                    .iter()
-                    .map(|node| node.id.clone())
-                    .collect::<Vec<_>>()
+            if !previous.contains_key(&parent)
+                || children
+                    != cached
+                        .nodes
+                        .iter()
+                        .map(|node| node.id.clone())
+                        .collect::<Vec<_>>()
                 || next != cached.next
             {
                 patch.branches.push(tree::BranchPatch {
@@ -182,6 +207,111 @@ impl State {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A commit's paths are already complete: collapsed folders must not require more guest turns.
+    #[test]
+    fn history_tree_complete_publication_includes_unexpanded_descendants() {
+        let mut state = State {
+            history_files: (0..220)
+                .map(|index| format!("src/nested/file-{index:03}.rs"))
+                .chain(["docs/readme.md".into()])
+                .collect(),
+            ..Default::default()
+        };
+        let handle = api::ResourceHandle {
+            instance: "fixture".into(),
+            scope: "workspace".into(),
+            resource: 1,
+        };
+        state.trees.insert("files".into(), handle.clone());
+        let request = tree::Request {
+            tree: handle,
+            epoch: 1,
+            sequence: 1,
+            parent: None,
+            cursor: None,
+            max_nodes: 128,
+        };
+        let root = state.tree_page(&request).unwrap();
+        state.record_tree_page(&request, root);
+        let (patch, pages, paths) = state.tree_patch("files").unwrap();
+        assert_eq!(
+            paths
+                .values()
+                .filter(|path| matches!(path, TreePath::Leaf(_)))
+                .count(),
+            221
+        );
+        assert!(pages.values().all(|page| page.next.is_none()));
+        assert_eq!(
+            pages[&Some(format!("d{}", node_id("src/nested")))]
+                .nodes
+                .len(),
+            220
+        );
+        patch.validate().unwrap();
+        state.tree_pages.insert("files".into(), pages);
+        state.tree_paths = paths
+            .into_iter()
+            .map(|(id, path)| (format!("files:{id}"), path))
+            .collect();
+        let cached = state.history_navigation_files();
+        assert!(!state.tree_event(tree::Event::Request(request)).unwrap());
+        assert_eq!(
+            state.history_navigation_files(),
+            cached,
+            "late root input cannot trim the complete forest"
+        );
+    }
+
+    /// Provider navigation follows visible directory-first order, including compact ancestors.
+    #[test]
+    fn history_tree_complete_navigation_has_full_order_and_exact_reveal_path() {
+        let mut state = State {
+            history_files: vec![
+                "a.txt".into(),
+                "src/nested/a.rs".into(),
+                "src/nested/b.rs".into(),
+            ],
+            ..Default::default()
+        };
+        let (_, pages, paths) = state.tree_patch("files").unwrap();
+        state.tree_pages.insert("files".into(), pages);
+        state.tree_paths.extend(
+            paths
+                .into_iter()
+                .map(|(id, path)| (format!("files:{id}"), path)),
+        );
+        assert_eq!(
+            state.history_navigation_files(),
+            ["src/nested/a.rs", "src/nested/b.rs", "a.txt"]
+        );
+        assert_eq!(
+            state.history_reveal_ids("src/nested/b.rs").unwrap(),
+            [
+                format!("d{}", node_id("")),
+                format!("d{}", node_id("src/nested")),
+                node_id("src/nested/b.rs")
+            ]
+        );
+        assert!(state.history_reveal_ids("missing.rs").is_err());
+    }
+
+    /// Oversized complete publications fail explicitly rather than silently keeping a partial prefix.
+    #[test]
+    fn history_tree_complete_publication_rejects_excess_nodes() {
+        let state = State {
+            history_files: (0..tree::MAX_NODES)
+                .map(|index| format!("file-{index}.txt"))
+                .collect(),
+            ..Default::default()
+        };
+        let error = state
+            .tree_patch("files")
+            .err()
+            .expect("total plus leaves exceeds quota");
+        assert_eq!(error.code, api::ErrorCode::LimitExceeded);
+    }
 
     /// Simulate successful ordinary provider replies without introducing a test-only SDK transport.
     fn load(state: &mut State, name: &str) {
@@ -360,9 +490,9 @@ mod tests {
         assert_eq!(patch.nodes[0].tone, Some(tree::Tone::Negative));
     }
 
-    /// A partial page retains its loaded count and a corrected continuation after insertion.
+    /// Existing partial history pages become complete, so scrolling and expanding need no replies.
     #[test]
-    fn incremental_tree_plan_keeps_partial_page_boundary_without_loading_other_files() {
+    fn history_tree_complete_publication_finishes_existing_partial_pages() {
         let mut state = State {
             history_files: (0..200).map(|i| format!("file-{i:03}.txt")).collect(),
             ..Default::default()
@@ -394,9 +524,9 @@ mod tests {
         state.record_tree_page(&request, page);
         state.history_files.insert(0, "a-new.txt".into());
         let (patch, pages, _) = state.tree_patch("files").unwrap();
-        assert_eq!(pages[&request.parent].nodes.len(), 10);
-        assert_eq!(pages[&request.parent].next.as_deref(), Some("10"));
-        assert_eq!(patch.nodes.len(), 2);
-        assert_eq!(patch.branches[0].children.len(), 10);
+        assert_eq!(pages[&request.parent].nodes.len(), 201);
+        assert_eq!(pages[&request.parent].next, None);
+        assert_eq!(patch.nodes.len(), 192);
+        assert_eq!(patch.branches[0].children.len(), 201);
     }
 }

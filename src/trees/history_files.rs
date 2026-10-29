@@ -22,6 +22,79 @@ impl TreeEntry {
 }
 
 impl State {
+    /// Return the tree's full directory-first leaf order, independently of native disclosure.
+    pub(crate) fn history_navigation_files(&self) -> Vec<String> {
+        let Some(pages) = self.tree_pages.get("files") else {
+            return self.history_files.clone();
+        };
+        let mut result = Vec::with_capacity(self.history_files.len());
+        let mut pending = Vec::new();
+        if let Some(root) = pages.get(&None) {
+            pending.extend(root.nodes.iter().rev());
+        }
+        while let Some(node) = pending.pop() {
+            if node.branch {
+                if let Some(branch) = pages.get(&Some(node.id.clone())) {
+                    pending.extend(branch.nodes.iter().rev());
+                }
+            } else if let Some(TreePath::Leaf(path)) =
+                self.tree_paths.get(&format!("files:{}", node.id))
+            {
+                result.push(path.clone());
+            }
+        }
+        // Before the first complete admission no partial prefix may become a navigation boundary.
+        if result.len() == self.history_files.len() {
+            result
+        } else {
+            self.history_files.clone()
+        }
+    }
+
+    /// A successful adjacent-file comparison reveals the same cached row without reopening it.
+    /// The caller first checks that the tree still belongs to the comparison's captured commit.
+    pub(crate) fn reveal_history_path(&self, path: &str) -> Result<(), api::Failure> {
+        let Some(handle) = self.trees.get("files") else {
+            return Ok(());
+        };
+        let ids = self.history_reveal_ids(path)?;
+        tree::reveal(handle.clone(), ids)
+    }
+
+    /// Derive exact visible ancestors, including compact directories and the synthetic total row.
+    pub(super) fn history_reveal_ids(&self, path: &str) -> Result<Vec<String>, api::Failure> {
+        let pages = self
+            .tree_pages
+            .get("files")
+            .ok_or_else(|| failure("Changed-file tree is not ready"))?;
+        let parents: BTreeMap<_, _> = pages
+            .iter()
+            .flat_map(|(parent, page)| {
+                page.nodes
+                    .iter()
+                    .map(move |node| (node.id.clone(), parent.clone()))
+            })
+            .collect();
+        let id = node_id(path);
+        if self.tree_paths.get(&format!("files:{id}")) != Some(&TreePath::Leaf(path.into())) {
+            return Err(failure("Changed file is no longer in the displayed tree"));
+        }
+        let mut current = Some(id);
+        let mut ids = Vec::new();
+        while let Some(id) = current {
+            if ids.len() >= 64 {
+                return Err(failure("Changed-file ancestor path exceeds tree depth"));
+            }
+            current = parents
+                .get(&id)
+                .cloned()
+                .ok_or_else(|| failure("Changed-file ancestor is missing"))?;
+            ids.push(id);
+        }
+        ids.reverse();
+        Ok(ids)
+    }
+
     /// One projection serves lazy replies and cached patches so their IDs, labels and counts agree.
     /// An empty directory path identifies the synthetic history total; real Git paths are nonempty.
     pub(super) fn tree_entries(

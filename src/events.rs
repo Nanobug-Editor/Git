@@ -107,9 +107,11 @@ impl State {
                 subscription: _,
                 error,
             } => {
-                // The host retired this subscription before the terminal receipt. Do not
-                // restart an unbounded stream; explicit reactivation can rebuild the pair.
+                // The host retired this subscription before the terminal receipt. Existing
+                // readonly identities can no longer rely on close events; a later user file
+                // request may acquire a new stream once, without notification-driven retries.
                 self.document_subscription = None;
+                self.forget_unobserved_diff_sources();
                 self.message = error.to_string();
                 return Ok(true);
             }
@@ -282,6 +284,9 @@ impl State {
                     return Ok(true);
                 }
                 if let Err(error) = &result {
+                    if self.renew_diff_snapshot(&intent, new_source, error)? {
+                        return Ok(false);
+                    }
                     if comparisons::is_diff_intent(&intent) {
                         self.abort_diff(Some(error));
                     }
@@ -531,6 +536,7 @@ impl State {
                             right,
                             third,
                             navigation: self.comparison_navigation(),
+                            initial_position: self.comparison_position(),
                             // Artwork is packaged here; the public host mechanism owns only display folding.
                             folding: Some(api::ComparisonFolding {
                                 collapse: ui::ToolIcon::new(

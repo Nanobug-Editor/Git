@@ -1,7 +1,7 @@
 {
   "id": "git",
   "name": "Git",
-  "version": "0.1.46",
+  "version": "0.1.48",
   "protocol": 7,
   "component": "git.wasm",
   "permissions": ["process.exec", "process.service.rebase", "dependencies.prepare", "ui.panels", "assets.read", "editor.read", "editor.write", "workspace.read", "workspace.write", "storage"],
@@ -24,7 +24,7 @@
       "ui.native": ">=1.2,<2",
       "ui.styles": "^1",
       "ui.panels": ">=1.2,<2",
-      "ui.tree": ">=1.8,<2",
+      "ui.tree": ">=1.9,<2",
       "ui.icons": "^1",
       "plugin.commands": "^1",
       "ui.canvas": ">=1.11,<2",
@@ -32,7 +32,7 @@
       "ui.collections": "^1",
       "editor.documents": ">=1.2,<2",
       "editor.virtual": ">=1.2,<2",
-      "editor.diff": ">=1.4,<2",
+      "editor.diff": ">=1.5,<2",
       "editor.edit": ">=1.1,<2",
       "editor.layout": "^2",
       "lifecycle.timers": "^1"
@@ -76,7 +76,7 @@
   ],
   "commands": [
     {"id":"workspace-action","title":"Git: 工作区入口 / Workspace entry","signature":{"permissions":["process.exec","ui.panels","assets.read","editor.read","editor.write","workspace.read","storage"],"parameters":{"type":"record","fields":{"action":{"type":"string","max_bytes":64},"target":{"type":"string","max_bytes":4096}}},"result":{"type":"null"}}},
-    {"id":"history-adjacent","title":"Git: 相邻改动文件 / Adjacent changed file","signature":{"permissions":["process.exec","ui.panels","assets.read","editor.read","workspace.read","storage"],"parameters":{"type":"record","fields":{"view":{"type":"string","max_bytes":128},"path":{"type":"string","max_bytes":4096}}},"result":{"type":"null"}}},
+    {"id":"history-adjacent","title":"Git: 相邻改动文件 / Adjacent changed file","signature":{"permissions":["process.exec","ui.panels","assets.read","editor.read","workspace.read","storage"],"parameters":{"type":"record","fields":{"view":{"type":"string","max_bytes":128},"path":{"type":"string","max_bytes":4096},"position":{"type":"string","max_bytes":32}},"optional":["position"]},"result":{"type":"null"}}},
     {"id":"branch-context","title":"Git: 分支右键操作 / Branch context action","signature":{"permissions":["process.exec","ui.panels","assets.read","editor.read","editor.write","workspace.read","storage"],"parameters":{"type":"record","fields":{"action":{"type":"string","max_bytes":64},"target":{"type":"string","max_bytes":4096}}},"result":{"type":"null"}}},
     {"id":"rebase-plan","title":"Git: 整理提交… / Interactive rebase…"},
     {"id":"diff","title":"Git: 查看工作区差异 / Compare worktree"},

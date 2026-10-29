@@ -16,6 +16,9 @@ mod fast_switch;
 #[path = "workbench_pagination_tests.rs"]
 mod pagination;
 
+#[path = "workbench_startup_tests.rs"]
+mod startup;
+
 /// A discovered worktree supplies the same scoped identity as the production discovery receipt.
 fn workbench() -> State {
     State {
@@ -113,6 +116,18 @@ fn complete_history(state: &mut State, repository: &[Commit]) {
             Purpose::HistoryBlob { column } => {
                 format!("100644 blob {column:040x}\tsrc/selected.rs\0").into_bytes()
             }
+            Purpose::HistoryBatch { columns, .. } => columns
+                .iter()
+                .map(|column| {
+                    let text = if *column == 0 {
+                        "parent text\n"
+                    } else {
+                        "selected text\n"
+                    };
+                    format!("{column:040x} blob {}\n{text}\n", text.len())
+                })
+                .collect::<String>()
+                .into_bytes(),
             Purpose::Snapshot { column } => match column {
                 0 => b"parent text\n".to_vec(),
                 _ => b"selected text\n".to_vec(),

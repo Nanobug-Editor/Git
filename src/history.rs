@@ -72,9 +72,6 @@ impl State {
                 if button == 0 && self.history_columns.begin(x, edges) {
                     return false; // A separator press never selects a commit or starts Git queries.
                 }
-                if self.cancel_history_reads().is_err() {
-                    return false;
-                }
                 let index = ((y + self.log_scroll) / 28.) as usize;
                 self.select_history_row(index, shift)
             }
@@ -198,6 +195,11 @@ impl State {
     /// Local observations revisit the loaded range, never implicitly load the rest of a repository.
     pub(super) fn refresh_log(&mut self) {
         self.history_cache.advance();
+        // The first authoritative page is required work even when requested by visibility.
+        // A genuine user action may preempt its read, but the existing idle continuation must
+        // resume it without a thirty-second timer. An accepted empty page is complete as well.
+        self.history_cache.pending |=
+            self.commits.is_empty() && !self.history_cache.owns_page(&self.filter);
         self.history_refresh = Some(Refresh {
             limit: self.commits.len().max(128),
             reuse_unchanged: self.automatic_observation,
@@ -333,14 +335,42 @@ impl State {
     }
 
     /// Pointer and keyboard selection share stable OIDs and the same oldest-first batch order.
-    /// A valid row always starts an immutable file query and reports that business change.
+    /// New rows supersede queued metadata reads; repeated input retains its in-flight preview.
     pub(super) fn select_history_row(&mut self, index: usize, extend: bool) -> bool {
-        self.mark_history_row(index, extend);
+        let selection_changed = self.mark_history_row(index, extend);
         let Some(commit) = self.commits.get(index) else {
             return false;
         };
+        // Repeated selection must not queue duplicate immutable reads or reset parent choices.
+        let metadata_pending = self
+            .running
+            .iter()
+            .map(|running| &running.command)
+            .chain(self.queue.iter())
+            .any(|command| {
+                matches!(&command.purpose,
+                Purpose::Files(oid) | Purpose::CommitMessage(oid) if oid == &commit.oid)
+            });
+        if self.selected == commit.oid
+            && ((self.history_loading && metadata_pending)
+                || (!self.history_loading
+                    && self
+                        .history_preview_commit
+                        .as_ref()
+                        .is_some_and(|preview| preview.oid == commit.oid)))
+        {
+            return selection_changed;
+        }
         let oid = commit.oid.clone();
         let next = commit.clone();
+        // A running readonly child may finish naturally, but obsolete work that has not started
+        // must not delay the newest selection. Its receipt is already scoped to the captured OID.
+        self.queue.retain(|command| {
+            !matches!(
+                command.purpose,
+                Purpose::Files(_) | Purpose::CommitMessage(_)
+            )
+        });
         if self.history_preview_commit.is_none() && !self.history_loading {
             self.history_preview_commit = self.history_commit().cloned();
         }
@@ -356,7 +386,7 @@ impl State {
         if self.restore_history_preview() {
             return true;
         }
-        self.queue.push_back(Command::new(
+        self.queue.push_front(Command::new(
             vec![
                 "diff-tree".into(),
                 "--root".into(),
@@ -418,9 +448,6 @@ impl State {
                 "up" | "down" | "home" | "end" | "pageup" | "pagedown" | "enter"
             )
         {
-            return false;
-        }
-        if self.cancel_history_reads().is_err() {
             return false;
         }
         let current = self
@@ -496,13 +523,14 @@ mod tests {
         );
         assert_eq!(state.log_scroll, 84.);
         state.queue.clear();
+        // Model the completed receipt; clearing its queue alone leaves a cancelled load that
+        // Enter is now expected to recover rather than treating as an active preview.
+        state.history_loading = false;
+        state.history_preview_commit = state.history_commit().cloned();
         state.history_key("x", false);
         assert!(state.queue.is_empty());
         state.history_key("enter", false);
         assert_eq!(state.selected, "3");
-        assert!(matches!(
-            state.queue.front().unwrap().purpose,
-            Purpose::Files(_)
-        ));
+        assert!(state.queue.is_empty(), "Enter preserves the active preview");
     }
 }

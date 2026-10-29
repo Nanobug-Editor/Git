@@ -222,3 +222,99 @@ fn failed_replacement_never_restores_a_closed_original_source() {
     );
     assert!(!state.diff_views.contains_key("retained"));
 }
+
+/// Losing the close stream invalidates cached capabilities while keeping the visible view's arrows.
+#[test]
+fn lost_document_stream_drops_cached_sources_without_dropping_navigation() {
+    let subscription = handle(50);
+    let mut state = State {
+        document_subscription: Some(subscription.clone()),
+        diff_key: "retained".into(),
+        ..Default::default()
+    };
+    let navigation = HistoryNavigation::capture(
+        vec!["parent".into(), "commit".into()],
+        vec!["first.txt".into(), "second.txt".into()],
+        "first.txt",
+    );
+    state.diff_views.insert(
+        "retained".into(),
+        DiffSources {
+            left: Some(source("left", 1, 1).document),
+            right: Some(source("right", 1, 2).document),
+            navigation,
+            ..Default::default()
+        },
+    );
+    state.begin_diff_flight(true);
+    state
+        .event(
+            None,
+            api::Notification::SubscriptionFailed {
+                subscription,
+                error: api::Failure::new(api::ErrorCode::LimitExceeded, "Document stream overflow"),
+            },
+        )
+        .unwrap();
+    let cached = &state.diff_views["retained"];
+    assert!(
+        cached.left.is_none() && cached.right.is_none(),
+        "closed sources cannot remain reusable after stream loss"
+    );
+    assert!(
+        cached.navigation.is_some(),
+        "the current native comparison still owns its navigation context"
+    );
+    state.take_diff_cleanup(Some(&failure("later request failed")));
+    let restored = &state.diff_views["retained"];
+    assert!(
+        restored.left.is_none() && restored.right.is_none(),
+        "failure cannot restore unobserved capabilities"
+    );
+    assert!(restored.navigation.is_some());
+}
+
+/// Renewal removes the exact cached pane from rollback, while fresh-open failures remain final.
+#[test]
+fn rejected_cached_source_is_not_restored_or_retried_after_fresh_open_failure() {
+    let mut state = State {
+        diff_key: "retained".into(),
+        ..Default::default()
+    };
+    state.diff_views.insert(
+        "retained".into(),
+        DiffSources {
+            left: Some(source("left", 1, 1).document),
+            right: Some(source("right", 1, 2).document),
+            ..Default::default()
+        },
+    );
+    state.begin_diff_flight(true);
+    state.forget_rejected_diff_source(0);
+    for code in [
+        api::ErrorCode::PermissionDenied,
+        api::ErrorCode::InvalidHandle,
+        api::ErrorCode::StaleRevision,
+        api::ErrorCode::NotFound,
+    ] {
+        let error = api::Failure::new(code, "fresh admission failed");
+        assert!(
+            !state
+                .renew_diff_snapshot("diff-left", true, &error)
+                .unwrap(),
+            "fresh allocations must not create an automatic retry loop"
+        );
+    }
+    let error = api::Failure::new(api::ErrorCode::TimedOut, "read timed out");
+    assert!(
+        !state
+            .renew_diff_snapshot("diff-right", false, &error)
+            .unwrap()
+    );
+    state.take_diff_cleanup(Some(&error));
+    assert!(state.diff_views["retained"].left.is_none());
+    assert_eq!(
+        state.diff_views["retained"].right.as_ref().unwrap().id,
+        "right"
+    );
+}

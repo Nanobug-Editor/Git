@@ -1,6 +1,6 @@
 # Git for Nanobug
 
-Local candidate 0.1.46 uses the configurable native `Editor` contract (`ui.code_editor ^2`, `editor.layout ^2`). It requires the matching development host, including `ui.canvas >=1.11` and `editor.virtual >=1.2`; content, Undo/Redo and existing plugin data are retained. Build this candidate with that host rather than the historical host revision below.
+Local candidate 0.1.48 uses the configurable native `Editor` contract (`ui.code_editor ^2`, `editor.layout ^2`). It requires the matching development host, including `ui.canvas >=1.11`, `editor.virtual >=1.2`, `ui.tree >=1.9` and `editor.diff >=1.5`; content, Undo/Redo and existing plugin data are retained. Build this candidate with that host rather than the historical host revision below.
 
 
 [简体中文](README.zh-CN.md)
@@ -20,7 +20,11 @@ $nanobug = 'C:\Projects\RustProjects\Editor\target\debug\editor-app.exe'
 & $nanobug --plugin-package . --output target/packages
 ```
 
-The package builder also builds `native/` with Cargo and records the native helper's actual artifact digest. Install the resulting `git-0.1.46.zip` through Nanobug's plugin manager. An installed package does not require Rust or Cargo. Git must already be available through the host's configured tool resolution.
+The package builder also builds `native/` with Cargo and records the native helper's actual artifact digest. Install the resulting `git-0.1.48.zip` through Nanobug's plugin manager. An installed package does not require Rust or Cargo. Git must already be available through the host's configured tool resolution.
+
+Version 0.1.48 publishes complete changed-file metadata before folder expansion, batches historical sides in one Git process, and follows the full tree order for adjacent-file navigation. Adjacent navigation reveals the matching file; a second difference-boundary gesture within two seconds opens the previous file at its end or the next file at its start. Repository-diff preview tabs use the standard tab appearance. Retired comparison sources are renewed through the ordinary ownership-checked API.
+
+Version 0.1.47 retains startup history reads across native layout, measurement and focus receipts. If actual user input preempts the first page, loading resumes as soon as the serialized operation finishes, without waiting for the background timer. Empty results and failed queries do not retry indefinitely. Existing scrolling, file comparisons and installation permissions are unchanged.
 
 Version 0.1.46 supplies original file paths as language-recognition hints for readonly comparison sources. The host uses enabled language providers and the selected code theme; no source file is opened by this hint. Adjacent-file arrows retain the history panel and tree, prepare independent sources together, and reuse a bounded cache of immutable commit contents. Index and worktree reads remain fresh. History metadata columns follow the native viewport during outer split resizing without waiting for a guest redraw. Installation permissions are unchanged.
 

@@ -48,6 +48,11 @@ pub(crate) enum Purpose {
     HistoryBlob {
         column: usize,
     },
+    /// One immutable batch resolves every uncached side of the selected historical file.
+    HistoryBatch {
+        columns: Vec<usize>,
+        path: String,
+    },
     MergeSnapshot {
         path: String,
         column: usize,
