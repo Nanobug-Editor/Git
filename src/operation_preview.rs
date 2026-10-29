@@ -61,12 +61,14 @@ impl State {
         // persisted plan. Withdraw their old commands instead of falling through to execution.
         self.cancel_pending_write()?;
         self.refresh();
-        self.message = self
-            .label(
+        self.report(
+            Severity::Warning,
+            self.label(
                 "内容已变化，请重新选择操作并审查",
                 "Content changed. Select the operation again and review it",
             )
-            .into();
+            .into(),
+        );
         Ok(())
     }
 
@@ -135,12 +137,14 @@ impl State {
         self.pending_dirty = false;
         self.pending_recheck = false;
         self.operation_preview.draft = Some(draft);
-        self.message = self
-            .label(
+        self.report(
+            Severity::Information,
+            self.label(
                 "正在冻结目标与读取改写范围…",
                 "Resolving exact targets and reading affected history…",
             )
-            .into();
+            .into(),
+        );
         self.queue_operation_preview(first);
         Ok(true)
     }
@@ -323,12 +327,14 @@ impl State {
                     .expect("completed draft");
                 let command = draft.frozen_command()?;
                 self.set_pending_review(command, draft.panel, draft.dirty);
-                self.message = self
-                    .label(
+                self.report(
+                    Severity::Information,
+                    self.label(
                         "目标与影响已冻结，请检查后确认",
                         "Exact targets and effects are ready for review",
                     )
-                    .into();
+                    .into(),
+                );
                 return Ok(());
             }
         };

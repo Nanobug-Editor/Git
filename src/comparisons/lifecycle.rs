@@ -181,9 +181,10 @@ impl State {
     /// Successful native admission transfers source cleanup to its retained view descriptor.
     pub(crate) fn complete_diff_flight(&mut self) {
         // Reveal follows native success. A tree failure cannot roll back sources already owned
-        // by the visible comparison, but remains visible as a separate history diagnostic.
+        // by the visible comparison, but still publishes its diagnostic through the host.
         if let Err(error) = self.reveal_completed_history_file() {
             self.history_error = error.to_string();
+            self.report(Severity::Error, error.to_string());
         }
         if let Some(sources) = self.diff_views.get_mut(&self.diff_key) {
             sources.navigation = self.diff_navigation.take();
@@ -196,7 +197,7 @@ impl State {
     }
 
     /// Return only this intent's disposable capabilities, clearing all late-completion authority.
-    /// Existing tabs and refreshed old sources survive; errors are visible beside historical intent.
+    /// Existing tabs and refreshed old sources survive; errors reach the host message owner.
     pub(crate) fn take_diff_cleanup(
         &mut self,
         error: Option<&api::Failure>,
@@ -208,6 +209,7 @@ impl State {
             if flight.history {
                 self.history_error = error.to_string();
             }
+            self.report(Severity::Error, error.to_string());
             if matches!(
                 error.code,
                 api::ErrorCode::InvalidHandle

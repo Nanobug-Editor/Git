@@ -177,10 +177,12 @@ impl State {
                 Ok(_) => {
                     file.opaque = true;
                     self.message="冲突超过 64 块，请采用完整版本或外部处理 / More than 64 conflict blocks; choose a complete version or resolve externally".into();
+                    self.feedback.record(Severity::Warning, &self.message);
                 }
                 Err(error) => {
                     file.opaque = true;
                     self.message = error;
+                    self.feedback.record(Severity::Error, &self.message);
                 }
             }
         }

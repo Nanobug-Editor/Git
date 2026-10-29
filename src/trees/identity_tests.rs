@@ -325,7 +325,7 @@ fn tree_identity_directory_selected_preserves_scene_and_leaf_selection_works() {
             },
         };
         let completion: api::Completion = serde_json::from_str(
-            &GitPlugin::dispatch(serde_json::to_string(&invocation).unwrap()).unwrap(),
+            &feedback::dispatch(serde_json::to_string(&invocation).unwrap()).unwrap(),
         )
         .unwrap();
         let output = completion.result.unwrap();

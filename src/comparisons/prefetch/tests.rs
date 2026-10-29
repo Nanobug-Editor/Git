@@ -379,9 +379,11 @@ fn prefetch_dispatch_completion_is_invisible_and_stale_receipts_are_ignored() {
     };
     for _ in 0..2 {
         let completion: api::Completion = serde_json::from_str(
-            &dispatch_with(serde_json::to_string(&invocation).unwrap(), |_, _| {
-                panic!("unexpected query retry")
-            })
+            &dispatch_with(
+                serde_json::to_string(&invocation).unwrap(),
+                |_, _| panic!("unexpected query retry"),
+                feedback::accept,
+            )
             .unwrap(),
         )
         .unwrap();

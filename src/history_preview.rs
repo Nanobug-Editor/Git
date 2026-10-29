@@ -13,7 +13,7 @@ pub(super) fn decode_message(bytes: Vec<u8>) -> Result<String, api::Failure> {
 }
 
 impl State {
-    /// Keep a failed preview/readonly comparison observable in the dock where it was requested.
+    /// Stop failed preview work and retain its diagnostic for the shared host message publication.
     pub(super) fn fail_history_preview(&mut self) {
         if self.history_loading || self.diff_history {
             self.history_error = self.message.clone();
@@ -96,12 +96,7 @@ impl State {
                 ),
             ));
         }
-        if !self.history_error.is_empty() {
-            details.push(ui::Node::text("history-error", &self.history_error));
-        }
-        if !self.history_notice.is_empty() && self.history_notice != self.history_error {
-            details.push(ui::Node::text("history-status", &self.history_notice));
-        }
+        // Operation diagnostics are published to the host message owner; commit metadata stays stable.
         ui::Node::column(
             "history-preview",
             vec![

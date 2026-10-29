@@ -30,7 +30,12 @@ fn workbench() -> State {
             }),
             ..Default::default()
         },
-        visible_panels: BTreeMap::from([("history".into(), true)]),
+        // These view tests mount all compared surfaces; hidden-window coverage is separate.
+        visible_panels: BTreeMap::from([
+            ("history".into(), true),
+            ("commit-details".into(), true),
+            ("conflicts".into(), true),
+        ]),
         ..Default::default()
     }
 }

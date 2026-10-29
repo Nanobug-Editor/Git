@@ -175,36 +175,8 @@ impl State {
         })
     }
 
-    /// Failed submission details use a bounded modal instead of stretching the stationary composer.
-    pub(super) fn commit_submit_error_dialog(&self) -> Option<ui::Dialog> {
-        self.commit_submit_error.as_ref().map(|message| ui::Dialog {
-            id: "commit-submit-error".into(),
-            title: self.label("提交结果", "Submission result").into(),
-            width: 480.,
-            content: ui::Node::column(
-                "commit-submit-error-body",
-                vec![
-                    ui::Node::scroll(
-                        "commit-submit-error-scroll",
-                        ui::Node::text("commit-submit-error-message", message),
-                    )
-                    .height(180.),
-                    self.button("commit-submit-error-close", "关闭", "Close"),
-                ],
-            )
-            .gap(8.),
-        })
-    }
-
     /// Handle presentation controls only; repository mutations continue through existing admission.
     pub(super) fn commit_panel_event(&mut self, event: &ui::UiEvent) -> Result<bool, api::Failure> {
-        if (matches!(event.action, ui::Action::Dismiss)
-            || (matches!(event.action, ui::Action::Click)
-                && event.node == "commit-submit-error-close"))
-            && self.commit_submit_error.take().is_some()
-        {
-            return Ok(true);
-        }
         if matches!(event.action, ui::Action::Dismiss) && self.commit_hunks_open {
             self.commit_hunks_open = false;
             return Ok(true);

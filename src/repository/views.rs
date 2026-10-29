@@ -6,8 +6,8 @@ impl State {
     /// Clearing a remembered choice continues through the same explicit repository action.
     fn repository_information_dialog(&self) -> ui::Dialog {
         let repository = &self.repository;
-        // Local observations never advance this remote-only timestamp; results remain inspectable
-        // on demand, including startup errors for a directory without a supported repository.
+        // Local observations never advance this remote-only timestamp; operation messages stay
+        // in the host history while this dialog retains repository identity and policy only.
         let timestamp = self
             .last_fetch
             .map(model::utc)
@@ -63,7 +63,6 @@ impl State {
                             self.label("上次获取远程信息", "Last remote fetch")
                         ),
                     ),
-                    ui::Node::text("status", &self.message),
                     ui::Node::row("repo-actions", actions).wrap(),
                 ],
             ),
@@ -96,6 +95,7 @@ impl State {
         })
     }
 
+    /// Keep stash identity/preview state here; operation diagnostics belong to the host message history.
     fn repository_stash_dialog(&self) -> ui::Dialog {
         let repository = &self.repository;
         let rows = repository
@@ -207,7 +207,6 @@ impl State {
                     )
                     .resizable(),
                     ui::Node::row("repo-stash-controls", controls).wrap(),
-                    ui::Node::text("repo-stash-message", &self.message),
                 ],
             ),
         }

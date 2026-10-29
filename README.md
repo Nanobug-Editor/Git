@@ -1,13 +1,13 @@
 # Git for Nanobug
 
-Local candidate 0.1.50 uses the configurable native `Editor` contract (`ui.code_editor ^2`, `editor.layout ^2`). It requires the matching development host, including `ui.canvas >=1.11`, `editor.virtual >=1.2`, `ui.tree >=1.9` and `editor.diff >=1.5`; content, Undo/Redo and existing plugin data are retained. Build this candidate with that host rather than the historical host revision below.
+Local candidate 0.1.51 uses the configurable native `Editor` contract (`ui.code_editor ^2`, `editor.layout ^2`). It requires the matching development host, including `ui.canvas >=1.11`, `editor.virtual >=1.2`, `ui.tree >=1.9`, `editor.diff >=1.5` and `ui.interaction >=1.1`; content, Undo/Redo and existing plugin data are retained. The matching host revision is pinned in `host-sdk.json`; this candidate and its host commit have not been published.
 
 
 [简体中文](README.zh-CN.md)
 
 A native Git workbench for Nanobug, delivered as an independent WASM plugin. The left panel contains the staging tree and commit form; the bottom panel contains branch trees, a paged commit graph and an inline commit preview. File comparisons stay in main-editor tabs. Conflict resolution opens a separate native window.
 
-This is an initial development candidate. It requires the matching Nanobug host changes, including `ui.code_editor` 1.1; it has not been published to the marketplace. Comparisons use display-only blank-row alignment over the original native editor sessions. Bounded layout failures fall back explicitly to independent panes; native search/code-action panels pause alignment until closed.
+This is an initial development candidate. It requires the matching Nanobug host changes, including `ui.code_editor` 2.0 and `ui.interaction` 1.1; it has not been published to the marketplace. Comparisons use display-only blank-row alignment over the original native editor sessions. Bounded layout failures fall back explicitly to independent panes; native search/code-action panels pause alignment until closed.
 
 ## Build
 
@@ -17,10 +17,12 @@ Use Rust 1.95 or newer, the `wasm32-wasip2` target, and a matching Windows x86-6
 $nanobug = 'C:\Projects\RustProjects\Editor\target\debug\editor-app.exe'
 & $nanobug --plugin-cargo ./Cargo.toml check --target wasm32-wasip2
 & $nanobug --plugin-cargo ./Cargo.toml test --lib
-& $nanobug --plugin-package . --output target/packages
+& $nanobug --plugin-package . --output C:\Projects\RustProjects\Editor\dist\git
 ```
 
-The package builder also builds `native/` with Cargo and records the native helper's actual artifact digest. Install the resulting `git-0.1.50.zip` through Nanobug's plugin manager. An installed package does not require Rust or Cargo. Git must already be available through the host's configured tool resolution.
+The package builder also builds `native/` with Cargo and records the native helper's actual artifact digest. Install the resulting `git-0.1.51.zip` through Nanobug's plugin manager. An installed package does not require Rust or Cargo. Git must already be available through the host's configured tool resolution.
+
+Version 0.1.51 avoids rebuilding Git panels for unrelated document observations and omits hidden comparison snapshots from UI publication. Diagnostics and operation logs now appear in the host message center; warnings and errors use host notifications. This update requires the public `ui.interaction ^1.1` capability and its installation permission, including the delegated Git commands. Existing data and repository permissions are retained; review the added interaction permission when upgrading.
 
 Version 0.1.50 prepares at most the previous and next historical file after the current comparison is visible and required work is idle. Reads use frozen commit IDs and the existing bounded content cache; user actions cancel them first. Failed, oversized or retired reads stay silent and do not retry automatically. Prefetching neither opens tabs nor changes file selection, and worktree/index reads remain fresh. Host capabilities and installation permissions are unchanged.
 

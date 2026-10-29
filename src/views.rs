@@ -91,7 +91,7 @@ impl State {
 
     pub(super) fn views(&mut self) -> Vec<api::View> {
         if let Err(error) = self.publish_workspace() {
-            self.message = error.to_string();
+            self.report(Severity::Error, error.to_string());
         }
         self.revision += 1;
         let stamp = self.branch_menu_stamp();
@@ -103,7 +103,7 @@ impl State {
             // Busy/modal changes affect menus, not ref membership. Publishing metadata keeps
             // expanded provider pages, pending replies and native selection/scroll intact.
             if let Err(error) = self.update_branch_nodes() {
-                self.message = error.to_string();
+                self.report(Severity::Error, error.to_string());
             } else {
                 self.branch_menu_stamp = Some(stamp);
             }
@@ -138,9 +138,7 @@ impl State {
     /// `views` contains only panels being replaced; sibling documents and their inputs stay intact.
     fn apply_dialogs(&self, views: &mut [api::View]) {
         for view in views.iter_mut().filter(|view| view.panel == "staging") {
-            view.document.dialog = self
-                .commit_submit_error_dialog()
-                .or_else(|| self.commit_hunk_dialog());
+            view.document.dialog = self.commit_hunk_dialog();
         }
         for view in views.iter_mut().filter(|view| view.panel == "history") {
             if let Some(dialog) = self.branch_dialog() {
@@ -242,6 +240,17 @@ impl State {
     }
     /// History snapshots and conflict result identities are isolated even while both windows are open.
     fn comparison_document(&self, conflict: bool) -> ui::Document {
+        let panel = if conflict {
+            "conflicts"
+        } else {
+            "commit-details"
+        };
+        if !self.visible_panels.get(panel).copied().unwrap_or(false) {
+            // Hidden secondary windows must not duplicate the native comparison's source text
+            // in every tree click/document notification. Visibility reopens the complete view.
+            return ui::Document::new(ui::Node::column("window-root", Vec::new()).grow())
+                .revision(self.revision);
+        }
         let merge = self.merge_files.get(&self.merge_selected);
         let columns = if conflict {
             merge.map(|file| file.columns.as_slice()).unwrap_or(&[])
@@ -476,7 +485,6 @@ impl State {
                         .resizable()
                         .grow(),
                     ui::Node::row("merge-actions", actions).wrap(),
-                    ui::Node::text("window-status", &self.message),
                 ],
             )
             .grow()

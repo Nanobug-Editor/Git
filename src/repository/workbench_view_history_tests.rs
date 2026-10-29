@@ -346,7 +346,7 @@ fn dispatch_history(event: api::Notification) -> ui::Document {
         },
     };
     let completion: api::Completion = serde_json::from_str(
-        &GitPlugin::dispatch(serde_json::to_string(&invocation).unwrap()).unwrap(),
+        &feedback::dispatch(serde_json::to_string(&invocation).unwrap()).unwrap(),
     )
     .unwrap();
     completion
@@ -458,9 +458,9 @@ fn headerless_history_keeps_graph_inset_columns_and_scroll_aligned() {
 }
 
 /// The public history root has no footer even after errors; its explicit information dialog
-/// preserves repository policy, fetch time and operation results without starting another query.
+/// preserves repository policy and fetch time without duplicating the host's operation messages.
 #[test]
-fn history_without_footer_keeps_results_and_repository_details_in_the_information_dialog() {
+fn history_without_footer_keeps_repository_details_and_host_owns_operation_results() {
     for locale in ["zh-CN", "en-US"] {
         let mut state = workbench();
         state.environment.locale = locale.into();
@@ -515,10 +515,7 @@ fn history_without_footer_keeps_results_and_repository_details_in_the_informatio
             matches!(&find_node(&dialog.content, "repo-fetch-time").unwrap().kind,
             ui::Kind::Text { text } if text.contains("UTC"))
         );
-        assert!(
-            matches!(&find_node(&dialog.content, "status").unwrap().kind,
-            ui::Kind::Text { text } if text == "Visible operation result / 操作结果")
-        );
+        assert!(find_node(&dialog.content, "status").is_none());
         assert!(
             matches!(&find_node(&dialog.content, "repo-identity").unwrap().kind,
             ui::Kind::Text { text } if text.contains("C:/history-fixture") && text.contains("linked worktree"))

@@ -1,10 +1,10 @@
 {
   "id": "git",
   "name": "Git",
-  "version": "0.1.50",
+  "version": "0.1.51",
   "protocol": 7,
   "component": "git.wasm",
-  "permissions": ["process.exec", "process.service.rebase", "dependencies.prepare", "ui.panels", "assets.read", "editor.read", "editor.write", "workspace.read", "workspace.write", "storage"],
+  "permissions": ["process.exec", "process.service.rebase", "dependencies.prepare", "ui.panels", "ui.interaction", "assets.read", "editor.read", "editor.write", "workspace.read", "workspace.write", "storage"],
   "storage_limit": 524288,
   "activation": {"background":{"purpose":"Observe local repository state for file colors and the current-branch title entry / 为文件颜色和顶部分支入口观察本地仓库状态"}},
   "api": {
@@ -18,6 +18,7 @@
       "dependencies": "^1",
       "storage.private": ">=1.1,<2",
       "ui.windows": "^1",
+      "ui.interaction": "^1.1",
       "ui.code_editor": "^2",
       "ui.visibility": "^1",
       "editor.actions": "^1",
@@ -75,9 +76,9 @@
     {"id":"commit-details","title":"提交详情 / Commit details","position":"window","default_visible":false,"show_in_window_controls":false}
   ],
   "commands": [
-    {"id":"workspace-action","title":"Git: 工作区入口 / Workspace entry","signature":{"permissions":["process.exec","ui.panels","assets.read","editor.read","editor.write","workspace.read","storage"],"parameters":{"type":"record","fields":{"action":{"type":"string","max_bytes":64},"target":{"type":"string","max_bytes":4096}}},"result":{"type":"null"}}},
-    {"id":"history-adjacent","title":"Git: 相邻改动文件 / Adjacent changed file","signature":{"permissions":["process.exec","ui.panels","assets.read","editor.read","workspace.read","storage"],"parameters":{"type":"record","fields":{"view":{"type":"string","max_bytes":128},"path":{"type":"string","max_bytes":4096},"position":{"type":"string","max_bytes":32}},"optional":["position"]},"result":{"type":"null"}}},
-    {"id":"branch-context","title":"Git: 分支右键操作 / Branch context action","signature":{"permissions":["process.exec","ui.panels","assets.read","editor.read","editor.write","workspace.read","storage"],"parameters":{"type":"record","fields":{"action":{"type":"string","max_bytes":64},"target":{"type":"string","max_bytes":4096}}},"result":{"type":"null"}}},
+    {"id":"workspace-action","title":"Git: 工作区入口 / Workspace entry","signature":{"permissions":["process.exec","ui.panels","ui.interaction","assets.read","editor.read","editor.write","workspace.read","storage"],"parameters":{"type":"record","fields":{"action":{"type":"string","max_bytes":64},"target":{"type":"string","max_bytes":4096}}},"result":{"type":"null"}}},
+    {"id":"history-adjacent","title":"Git: 相邻改动文件 / Adjacent changed file","signature":{"permissions":["process.exec","ui.panels","ui.interaction","assets.read","editor.read","workspace.read","storage"],"parameters":{"type":"record","fields":{"view":{"type":"string","max_bytes":128},"path":{"type":"string","max_bytes":4096},"position":{"type":"string","max_bytes":32}},"optional":["position"]},"result":{"type":"null"}}},
+    {"id":"branch-context","title":"Git: 分支右键操作 / Branch context action","signature":{"permissions":["process.exec","ui.panels","ui.interaction","assets.read","editor.read","editor.write","workspace.read","storage"],"parameters":{"type":"record","fields":{"action":{"type":"string","max_bytes":64},"target":{"type":"string","max_bytes":4096}}},"result":{"type":"null"}}},
     {"id":"rebase-plan","title":"Git: 整理提交… / Interactive rebase…"},
     {"id":"diff","title":"Git: 查看工作区差异 / Compare worktree"},
     {"id":"diff-index","title":"Git: 查看暂存差异 / Compare index"},

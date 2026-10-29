@@ -40,8 +40,10 @@ impl State {
                 match serde_json::from_slice::<Option<rebase_model::Plan>>(&bytes) {
                     Ok(plan) => self.interactive_plan = plan,
                     Err(_) => {
-                        self.message =
-                            "保存的变基计划无法读取 / Saved rebase plan is invalid".into();
+                        self.report(
+                            Severity::Warning,
+                            "保存的变基计划无法读取 / Saved rebase plan is invalid".into(),
+                        );
                     }
                 }
             }

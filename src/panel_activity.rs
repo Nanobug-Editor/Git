@@ -114,7 +114,7 @@ impl State {
         }
     }
 
-    /// Updating one diagnostic never replaces the other surface's last displayed message.
+    /// Retain operation-local diagnostic state; visual messages are published by the host owner.
     pub(super) fn retain_panel_feedback(&mut self, owner: FeedbackOwner, previous: &str) {
         if self.message == previous {
             return;

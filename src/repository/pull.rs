@@ -80,19 +80,23 @@ impl State {
         code: u32,
     ) -> Result<(), api::Failure> {
         if code != 0 {
-            self.repository_error(&stderr);
             if matches!(query, Query::PullBranch { .. }) {
-                self.message = self.label("Detached HEAD 不自动拉取；请切到有上游的本地分支", "Pull requires a local branch with an upstream; detached HEAD is not pulled automatically").into();
+                self.report(Severity::Warning, self.label("Detached HEAD 不自动拉取；请切到有上游的本地分支", "Pull requires a local branch with an upstream; detached HEAD is not pulled automatically").into());
             } else if matches!(query, Query::PullRemote { .. } | Query::PullUpstream { .. }) {
-                self.message = self
-                    .label(
+                self.report(
+                    Severity::Warning,
+                    self.label(
                         "当前分支没有可用的上游；请先配置跟踪分支",
                         "The current branch has no usable upstream; configure tracking first",
                     )
-                    .into();
-            } else if matches!(query, Query::PullApplied) {
-                // Git may already have entered merge/rebase conflict state. Refresh does not claim rollback.
-                self.refresh();
+                    .into(),
+                );
+            } else {
+                self.report(Severity::Error, self.repository_failure_message(&stderr));
+                if matches!(query, Query::PullApplied) {
+                    // Git may already have entered merge/rebase conflict state. Refresh does not claim rollback.
+                    self.refresh();
+                }
             }
             return Ok(());
         }
@@ -220,12 +224,14 @@ impl State {
                 if head != snapshot.head {
                     // Commit-then-continue intentionally advances HEAD. Recompute the local preview
                     // and ask again for any history-changing strategy; never execute the stale plan.
-                    self.message = self
-                        .label(
+                    self.report(
+                        Severity::Information,
+                        self.label(
                             "本地提交已变化，重新核对拉取预览",
                             "Local commits changed; the pull preview is being rebuilt",
                         )
-                        .into();
+                        .into(),
+                    );
                     self.queue.push_back(Command::new(
                         vec![
                             "rev-list".into(),
@@ -281,7 +287,10 @@ impl State {
             Query::PullApplied => {
                 self.repository.dialog = None;
                 self.repository.divergence = None;
-                self.message = self.label("拉取完成", "Pull completed").into();
+                self.report(
+                    Severity::Information,
+                    self.label("拉取完成", "Pull completed").into(),
+                );
                 self.refresh();
             }
             _ => unreachable!("non-pull query is routed by repository_finished"),

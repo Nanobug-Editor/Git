@@ -248,10 +248,10 @@ impl State {
                 self.history_refresh = None;
                 self.history_refreshed_at = Some(std::time::Instant::now());
                 self.automatic_observation = false;
-                self.message = self.label(
+                self.report(Severity::Warning, self.label(
                     "历史在刷新期间持续变化，已保留上次完整结果；请稍后刷新",
                     "History kept changing during refresh; the previous complete view is retained. Refresh again shortly.",
-                ).into();
+                ).into());
                 return;
             }
             let commits = self.history_refresh.take().unwrap().commits;

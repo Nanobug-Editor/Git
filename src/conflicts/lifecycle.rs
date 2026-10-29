@@ -329,7 +329,7 @@ impl State {
                     file.proposals_suspended = true;
                     file.read_valid = false;
                 }
-                self.message = "无法确认 Git 操作身份，冲突建议已暂停，请刷新 / Cannot verify Git operation identity; conflict proposals paused; refresh".into();
+                self.report(Severity::Warning, "无法确认 Git 操作身份，冲突建议已暂停，请刷新 / Cannot verify Git operation identity; conflict proposals paused; refresh".into());
                 return Ok(());
             }
         };

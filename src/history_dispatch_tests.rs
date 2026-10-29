@@ -19,7 +19,12 @@ fn dispatch_using(
         },
     };
     let completion: api::Completion = serde_json::from_str(
-        &dispatch_with(serde_json::to_string(&invocation).unwrap(), launch).unwrap(),
+        &dispatch_with(
+            serde_json::to_string(&invocation).unwrap(),
+            launch,
+            feedback::accept,
+        )
+        .unwrap(),
     )
     .unwrap();
     completion.result.unwrap()

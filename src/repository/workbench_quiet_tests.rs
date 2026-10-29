@@ -38,7 +38,7 @@ fn dispatch(state: State, event: api::Notification) -> (State, api::Output) {
         },
     };
     let completion: api::Completion =
-        serde_json::from_str(&GitPlugin::dispatch(serde_json::to_string(&input).unwrap()).unwrap())
+        serde_json::from_str(&feedback::dispatch(serde_json::to_string(&input).unwrap()).unwrap())
             .unwrap();
     let output = completion.result.unwrap();
     let state = STATE.with(|cell| std::mem::take(&mut *cell.borrow_mut()));

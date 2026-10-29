@@ -1,13 +1,13 @@
 # Git for Nanobug
 
-本地候选 0.1.50 使用统一可配置原生 `Editor` 契约（`ui.code_editor ^2`、`editor.layout ^2`），需要提供 `ui.canvas >=1.11`、`editor.virtual >=1.2`、`ui.tree >=1.9` 与 `editor.diff >=1.5` 的配套开发宿主；保留原内容、Undo/Redo 与插件数据。候选使用配套宿主构建，原有固定宿主记录仅用于历史版本。
+本地候选 0.1.51 使用统一可配置原生 `Editor` 契约（`ui.code_editor ^2`、`editor.layout ^2`），需要提供 `ui.canvas >=1.11`、`editor.virtual >=1.2`、`ui.tree >=1.9`、`editor.diff >=1.5` 与 `ui.interaction >=1.1` 的配套开发宿主；保留原内容、Undo/Redo 与插件数据。配套宿主版本固定在 `host-sdk.json`；本候选及其宿主提交尚未发布。
 
 
 [English](README.md)
 
 Nanobug 的独立 WASM Git 插件，使用原生界面。左侧为暂存文件树和提交表单，底部为分支树、分页提交拓扑及提交预览。文件比较保留在主编辑区；冲突处理使用独立原生窗口。
 
-当前是初始开发候选包，需要配套的 Nanobug 宿主改动（含 `ui.code_editor` 1.1），尚未发布到市场。比较使用显示层补白，原生编辑会话保留文本与撤销状态。超过布局预算时明确降级为独立滚动；打开原生搜索或代码操作面板时暂停整组对齐，关闭后恢复。
+当前是初始开发候选包，需要配套的 Nanobug 宿主改动（含 `ui.code_editor` 2.0 与 `ui.interaction` 1.1），尚未发布到市场。比较使用显示层补白，原生编辑会话保留文本与撤销状态。超过布局预算时明确降级为独立滚动；打开原生搜索或代码操作面板时暂停整组对齐，关闭后恢复。
 
 ## 构建
 
@@ -17,10 +17,12 @@ Nanobug 的独立 WASM Git 插件，使用原生界面。左侧为暂存文件�
 $nanobug = 'C:\Projects\RustProjects\Editor\target\debug\editor-app.exe'
 & $nanobug --plugin-cargo ./Cargo.toml check --target wasm32-wasip2
 & $nanobug --plugin-cargo ./Cargo.toml test --lib
-& $nanobug --plugin-package . --output target/packages
+& $nanobug --plugin-package . --output C:\Projects\RustProjects\Editor\dist\git
 ```
 
-打包器同时调用 Cargo 构建 `native/`，并记录原生辅助程序产物的真实摘要。通过 Nanobug 插件管理器安装生成的 `git-0.1.50.zip`。使用已构建包不需要 Rust 或 Cargo；Git 需要已安装，并可由宿主现有工具解析机制找到。
+打包器同时调用 Cargo 构建 `native/`，并记录原生辅助程序产物的真实摘要。通过 Nanobug 插件管理器安装生成的 `git-0.1.51.zip`。使用已构建包不需要 Rust 或 Cargo；Git 需要已安装，并可由宿主现有工具解析机制找到。
+
+0.1.51 不再因无关文档观察重建 Git 面板，隐藏比较窗口不再重复发布大段正文。错误、警告和操作日志统一进入宿主消息管理，错误与警告使用宿主通知浮窗。此版本新增公开 `ui.interaction ^1.1` 能力及对应安装权限，Git 委托命令也声明同一权限；升级时需确认新增交互权限，保留已有数据和仓库权限。
 
 0.1.50 在当前比较已显示、用户操作已处理完后，最多提前读取前后两个历史文件。读取使用固定提交编号和已有的有限内容缓存，新的用户操作优先取消预读。失败、超限或已关闭比较的结果静默丢弃，不会自动反复重试；预读不会打开额外标签或改变文件选择，工作区与暂存区仍实时读取。宿主能力和安装权限不变。
 

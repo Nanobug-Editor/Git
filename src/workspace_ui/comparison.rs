@@ -1,6 +1,41 @@
 //! Explicit branch comparisons freeze their object IDs and keep the existing native text sessions.
 use super::*;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A failed branch query publishes its error once through the host without claiming an empty diff.
+    #[test]
+    fn branch_comparison_failure_uses_host_feedback_instead_of_an_error_row() {
+        let mut state = State::default();
+        state.workspace_ui.comparison = Some(BranchComparison {
+            generation: 1,
+            reference: "refs/heads/main".into(),
+            left: "base".into(),
+            right: Some("head".into()),
+            files: BTreeMap::new(),
+            loading: true,
+            error: String::new(),
+            page: 0,
+        });
+        state
+            .finish_branch_comparison(1, b"", b"branch query failed", 1)
+            .unwrap();
+        let dialog = state.branch_comparison_dialog().unwrap();
+        let document = ui::Document::new(dialog.content);
+        assert!(document.active_node("branch-compare-error").is_none());
+        assert!(document.active_node("branch-compare-empty").is_none());
+        let _ = feedback::take_notices();
+        state.collect_feedback("", None);
+        state.flush_feedback(feedback::accept).unwrap();
+        assert!(feedback::take_notices().iter().any(|operation| matches!(operation,
+            plugin_protocol::interaction::Operation::PublishMessage { severity: Severity::Error, message, .. }
+                if message == "branch query failed"
+        )));
+    }
+}
+
 /// A paged file chooser is owned by one explicit branch comparison, never by history selection.
 pub(crate) struct BranchComparison {
     generation: u64,
@@ -109,6 +144,10 @@ impl State {
             Ok(_) => comparison.error = "差异文件超过 8192 项，请缩小比较范围 / More than 8192 changed files; narrow the comparison".into(),
             Err(error) => comparison.error = error,
         }
+        if !comparison.error.is_empty() {
+            let error = comparison.error.clone();
+            self.report(Severity::Error, error);
+        }
         Ok(())
     }
     /// Native file selection and paging keep the original comparison and exact accepted UI revision.
@@ -149,7 +188,7 @@ impl State {
         }
         Ok(true)
     }
-    /// Show all changed paths in bounded pages, preserving a real empty/error/loading state.
+    /// Show changed paths and loading/empty state; failed queries publish their diagnostics to the host.
     pub(crate) fn branch_comparison_dialog(&self) -> Option<ui::Dialog> {
         let comparison = self.workspace_ui.comparison.as_ref()?;
         let mut rows = vec![ui::Node::text(
@@ -168,9 +207,7 @@ impl State {
                 "branch-compare-loading",
                 self.label("正在读取差异…", "Reading differences…"),
             ));
-        } else if !comparison.error.is_empty() {
-            rows.push(ui::Node::text("branch-compare-error", &comparison.error));
-        } else if comparison.files.is_empty() {
+        } else if comparison.files.is_empty() && comparison.error.is_empty() {
             rows.push(ui::Node::text(
                 "branch-compare-empty",
                 self.label("没有差异", "No differences"),

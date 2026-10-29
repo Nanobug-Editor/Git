@@ -137,7 +137,7 @@ fn hot_palette_dispatch_keeps_queries_selection_scroll_and_commit_draft() {
         },
     };
     let reply: api::Completion =
-        serde_json::from_str(&GitPlugin::dispatch(serde_json::to_string(&input).unwrap()).unwrap())
+        serde_json::from_str(&feedback::dispatch(serde_json::to_string(&input).unwrap()).unwrap())
             .unwrap();
     let output = reply.result.unwrap();
     assert_eq!(output.views.len(), 1);

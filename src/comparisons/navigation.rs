@@ -227,7 +227,7 @@ mod tests {
 
     /// Synchronous launch failures after a successful source receipt still publish inline feedback.
     #[test]
-    fn adjacent_source_launch_failure_is_visible_in_history() {
+    fn adjacent_source_launch_failure_reaches_host_message_management() {
         let handle = api::ResourceHandle {
             instance: "fixture".into(),
             scope: "workspace".into(),
@@ -265,13 +265,12 @@ mod tests {
             publish,
             "launch error was hidden by the successful comparison fast path"
         );
-        let views = state.views();
-        assert!(
-            state
-                .changed_views(views)
-                .iter()
-                .any(|view| view.panel == "history")
-        );
+        state.collect_feedback("", None);
+        let _ = feedback::take_notices();
+        state.flush_feedback(feedback::accept).unwrap();
+        assert!(feedback::take_notices().iter().any(|notice| matches!(notice,
+            plugin_protocol::interaction::Operation::PublishMessage { severity: Severity::Error, message, .. }
+                if message.contains("native launch rejected"))));
     }
 
     /// Arrows received during an unrelated write coalesce by origin and cannot disturb that write.

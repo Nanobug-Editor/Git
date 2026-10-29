@@ -6,6 +6,7 @@ mod completion;
 mod conflicts;
 mod diagnostic;
 mod events;
+mod feedback;
 mod graph;
 mod history;
 #[cfg(test)]
@@ -34,6 +35,7 @@ mod workspace_ui;
 mod writes;
 use diagnostic::safe_diagnostic;
 use model::{Change, Commit};
+use plugin_protocol::interaction::Severity;
 use plugin_protocol::{
     Environment, api,
     bindings::{Guest, export},
@@ -78,10 +80,12 @@ struct State {
     /// Passive visibility/focus/save observations coalesce without taking over the active panel.
     passive_refresh_pending: bool,
     message: String,
-    /// History operations report beside their own selected commit, independently of the composer.
+    /// Typed host delivery is independent from business queries and retained UI scenes.
+    feedback: feedback::Feedback,
+    /// Last historical operation status remains internal; the host presents its diagnostic.
     history_notice: String,
     commit_message: String,
-    /// Submission failures belong to a dismissible dialog, never the permanent composer layout.
+    /// Submission errors retain operation state while the host presents their diagnostic.
     commit_submit_error: Option<String>,
     argument: String,
     selected: String,
@@ -92,7 +96,7 @@ struct State {
     history_file_status: BTreeMap<String, model::HistoryChange>,
     /// The full message belongs to the selected immutable commit, not to the moving log filter.
     history_message: String,
-    /// Preview diagnostics stay visible beside the selected commit without opening another window.
+    /// Last comparison failure is retained for lifecycle decisions; presentation belongs to the host.
     history_error: String,
     history_loading: bool,
     columns: Vec<String>,
@@ -256,7 +260,11 @@ struct GitPlugin;
 impl Guest for GitPlugin {
     /// Each event is correlated to this incarnation; late resource notifications are ignored.
     fn dispatch(payload: String) -> Result<String, String> {
-        dispatch_with(payload, Command::launch)
+        dispatch_with(
+            payload,
+            Command::launch,
+            plugin_protocol::interaction::start,
+        )
     }
 }
 
@@ -265,6 +273,10 @@ impl Guest for GitPlugin {
 fn dispatch_with(
     payload: String,
     mut launch: impl FnMut(&Command, &str) -> Result<Running, api::Failure>,
+    mut notify: impl FnMut(
+        plugin_protocol::interaction::Operation,
+        u32,
+    ) -> Result<api::ResourceHandle, api::Failure>,
 ) -> Result<String, String> {
     api::guest::dispatch(&payload, |input| {
         STATE.with(|cell| {
@@ -275,6 +287,12 @@ fn dispatch_with(
                     return state.configure_palette(*phase, values);
                 }
                 if let api::Input::Event { event, .. } = &input {
+                    if state.observe_feedback(event) {
+                        if let Err(error) = state.flush_feedback(&mut notify) {
+                            state.feedback_failed(&error);
+                        }
+                        return Ok(api::Output::default());
+                    }
                     // Tree/canvas routes bypass State::event, but every helper sees its receipt first.
                     state.background_resources.observe(event);
                     if !state.matches_background_resource(event) {
@@ -289,6 +307,7 @@ fn dispatch_with(
                 let previous_message = state.message.clone();
                 let comparison_only = state.history_comparison_event(&input);
                 let previous_history_error = state.history_error.clone();
+                let previous_submit_error = state.commit_submit_error.clone();
                 // Idle range movement cannot change sibling controls or comparison sources.
                 // Query/error/busy transitions still take the ordinary complete publication path.
                 let range_only = !state.ui_busy() && !state.explicit_refresh_pending && matches!(&input,
@@ -374,7 +393,7 @@ fn dispatch_with(
                     }
                     state.automatic_observation = false;
                     state.background_read = false;
-                    state.message = error.to_string();
+                    state.report(Severity::Error, error.to_string());
                     state.fail_panel_activity(feedback_owner, &error);
                 }
                 // Reading an immutable comparison cannot alter the log/tree document. Errors
@@ -423,6 +442,10 @@ fn dispatch_with(
                 if !state.busy() {
                     state.automatic_observation = false;
                     state.background_read = false;
+                }
+                state.collect_feedback(&previous_history_error, previous_submit_error.as_deref());
+                if let Err(error) = state.flush_feedback(&mut notify) {
+                    state.feedback_failed(&error);
                 }
                 Ok(api::Output {
                     views,
@@ -653,13 +676,16 @@ impl State {
                         return false;
                     }
                     self.automatic_observation = false;
-                    self.message = error.to_string();
-                    if matches!(command.purpose, Purpose::PushAfterCommit { .. }) {
-                        self.message = format!(
+                    // Context augments this one launch failure; do not emit its raw form first.
+                    let error = if matches!(command.purpose, Purpose::PushAfterCommit { .. }) {
+                        failure(format!(
                             "提交已成功，无法启动推送；本地提交已保留 / Commit succeeded, push could not start; local commit retained: {}",
-                            self.message
-                        );
-                    }
+                            error
+                        ))
+                    } else {
+                        error
+                    };
+                    self.report(Severity::Error, error.to_string());
                     if matches!(command.purpose, Purpose::PushAfterCommit { .. })
                         || command.args.first().is_some_and(|arg| arg == "commit")
                     {

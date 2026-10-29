@@ -35,7 +35,7 @@ fn dispatch_ui(panel: &str, node: &str, revision: u64, action: ui::Action) -> ap
         },
     };
     let receipt: api::Completion = serde_json::from_str(
-        &GitPlugin::dispatch(serde_json::to_string(&invocation).unwrap()).unwrap(),
+        &feedback::dispatch(serde_json::to_string(&invocation).unwrap()).unwrap(),
     )
     .unwrap();
     assert_eq!(receipt.id, 1);
@@ -253,6 +253,7 @@ fn identical_canvas_resize_dispatch_preserves_scene_and_real_changes_publish() {
     }
     // A malformed parent choice must still surface its normal diagnostic after a silent
     // observation; idempotent geometry cannot suppress the dispatcher's actual error path.
+    let _ = feedback::take_notices();
     let failure = dispatch_ui(
         "commit-details",
         "history-parent-0",
@@ -263,22 +264,19 @@ fn identical_canvas_resize_dispatch_preserves_scene_and_real_changes_publish() {
         !failure.views.is_empty(),
         "callback failures must remain visible"
     );
-    let mut diagnostic = None;
-    failure
-        .views
-        .iter()
-        .find(|view| view.panel == "commit-details")
-        .unwrap()
-        .document
-        .root
-        .visit(&mut |node| {
-            if let ui::Kind::Text { text } = &node.kind
-                && node.id == "window-status"
-            {
-                diagnostic = Some(text.clone());
-            }
-        });
-    assert!(diagnostic.unwrap().contains("Invalid parent selection"));
+    assert!(
+        feedback::take_notices()
+            .iter()
+            .any(|notice| matches!(notice,
+        plugin_protocol::interaction::Operation::PublishMessage { severity: Severity::Error, message, .. }
+            if message.contains("Invalid parent selection")))
+    );
+    assert!(
+        failure
+            .views
+            .iter()
+            .all(|view| view.document.active_node("window-status").is_none())
+    );
     STATE.with(|cell| *cell.borrow_mut() = State::default());
 }
 

@@ -334,12 +334,14 @@ impl State {
             Query::Discover => {
                 self.repository.discovering = false;
                 if code != 0 {
-                    self.message = self
-                        .label(
+                    self.report(
+                        Severity::Information,
+                        self.label(
                             "当前目录不是 Git 工作区；打开仓库根目录后刷新",
                             "This directory is not a Git worktree; open its root and refresh",
                         )
-                        .into();
+                        .into(),
+                    );
                     return Ok(());
                 }
                 let identity = Identity::parse(&output).map_err(failure)?;
@@ -357,17 +359,20 @@ impl State {
                         self.repository.preference = read.value;
                         self.repository_decode_preference();
                     }
-                    Err(error) => self.message = error.to_string(),
+                    Err(error) => self.report(Severity::Warning, error.to_string()),
                 }
                 self.refresh();
             }
             Query::Fetch => {
                 if code == 0 {
                     self.repository_record_fetch()?;
-                    self.message = self.label("获取完成", "Fetch completed").into();
+                    self.report(
+                        Severity::Information,
+                        self.label("获取完成", "Fetch completed").into(),
+                    );
                     self.refresh();
                 } else {
-                    self.repository_error(&stderr);
+                    self.report(Severity::Error, self.repository_failure_message(&stderr));
                 }
             }
             query @ (Query::PullBranch { .. }
@@ -386,15 +391,17 @@ impl State {
         Ok(())
     }
 
-    fn repository_error(&mut self, bytes: &[u8]) {
-        self.message = safe_diagnostic(bytes);
-        if self.message.trim().is_empty() {
-            self.message = self
-                .label(
-                    "Git 操作失败；刷新后检查真实状态",
-                    "Git operation failed; refresh to inspect its actual state",
-                )
-                .into();
+    /// Sanitize one failure cause before the caller chooses its final policy/context and severity.
+    fn repository_failure_message(&self, bytes: &[u8]) -> String {
+        let message = safe_diagnostic(bytes);
+        if message.trim().is_empty() {
+            self.label(
+                "Git 操作失败；刷新后检查真实状态",
+                "Git operation failed; refresh to inspect its actual state",
+            )
+            .into()
+        } else {
+            message
         }
     }
 
@@ -459,12 +466,14 @@ impl State {
             Err(error) if error.code == api::ErrorCode::Conflict => {
                 self.repository.preference = api::guest::read_preference(key, false)?.value;
                 self.repository_decode_preference();
-                self.message = self
-                    .label(
+                self.report(
+                    Severity::Warning,
+                    self.label(
                         "仓库偏好已在其他窗口变化；保留较新的设置",
                         "Repository preferences changed elsewhere; the newer setting was preserved",
                     )
-                    .into();
+                    .into(),
+                );
             }
             Err(error) => return Err(error),
         }

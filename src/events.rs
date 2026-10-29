@@ -22,7 +22,7 @@ impl State {
                     result.clone().map(|_| serde_json::Value::Null),
                 )?;
                 if let Err(error) = result {
-                    self.message = error.to_string();
+                    self.report(Severity::Error, error.to_string());
                 }
             }
             api::Notification::CommandInvocation(call) if call.id == "history-adjacent" => {
@@ -34,6 +34,7 @@ impl State {
                 // Busy/stale arrow callbacks must not clear another operation's owned queue.
                 if let Err(error) = result {
                     self.history_error = error.to_string();
+                    self.report(Severity::Error, error.to_string());
                 }
             }
             api::Notification::CommandInvocation(call) if call.id == "branch-context" => {
@@ -47,7 +48,7 @@ impl State {
                 // A queued native action can become unavailable before its typed turn runs.
                 // Return that failure without clearing another already-running operation's queue.
                 if let Err(error) = result {
-                    self.message = error.to_string();
+                    self.report(Severity::Error, error.to_string());
                 }
             }
             api::Notification::Command { id, arguments, .. } => {
@@ -112,10 +113,20 @@ impl State {
                 // request may acquire a new stream once, without notification-driven retries.
                 self.document_subscription = None;
                 self.forget_unobserved_diff_sources();
-                self.message = error.to_string();
-                return Ok(true);
+                self.report(
+                    if error.code == api::ErrorCode::LimitExceeded {
+                        Severity::Warning
+                    } else {
+                        Severity::Error
+                    },
+                    error.to_string(),
+                );
+                return Ok(false);
             }
             api::Notification::DocumentEvent { event, .. } => {
+                // Native selection, viewport and unrelated source changes affect no Git scene.
+                // Rebuilding every panel here feeds comparison layout back into its own observer.
+                publish = false;
                 if let api::DocumentEventKind::Closed(document) = &event.kind {
                     self.forget_closed_diff_source(document);
                     self.diff_views.retain(|_, sources| {
@@ -137,6 +148,7 @@ impl State {
                             .as_ref()
                             .is_some_and(|current| current.id == document.id)
                     }) {
+                        publish = true;
                         file.document = None;
                         file.blocks.clear();
                         file.read_valid = false;
@@ -156,6 +168,7 @@ impl State {
                             .as_ref()
                             .is_some_and(|old| old.id == info.document.id)
                         {
+                            publish = true;
                             file.document = Some(info.document.clone());
                             file.blocks.clear();
                             file.read_valid = false;
@@ -205,9 +218,10 @@ impl State {
                             self.queue.clear();
                             self.history_refresh = None;
                             self.cancel_operation_preview();
-                            self.message =
-                                "输出超过本次查询限制，请缩小范围 / Output limit exceeded".into();
-                            self.abort_diff(Some(&failure(self.message.clone())));
+                            let error =
+                                failure("输出超过本次查询限制，请缩小范围 / Output limit exceeded");
+                            self.report(Severity::Error, error.to_string());
+                            self.abort_diff(Some(&error));
                             self.fail_history_preview();
                         } else {
                             output.extend(bytes)
@@ -302,7 +316,7 @@ impl State {
                             file.opaque = true;
                         }
                         self.show_window("conflicts")?;
-                        self.message = error.to_string();
+                        self.report(Severity::Error, error.to_string());
                         return Ok(true);
                     }
                     if let Some(path) = intent.strip_prefix("merge-read:") {

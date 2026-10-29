@@ -11,6 +11,7 @@ fn opening_conflict_uses_each_readonly_snapshot_own_ranges() {
     let columns = vec!["base\n".to_owned(), "A\n".to_owned(), "B 中😀\n".to_owned()];
     let regions = plan::regions(&columns[1], &columns[0], &columns[2]).unwrap();
     let mut state = crate::State::default();
+    state.visible_panels.insert("conflicts".into(), true);
     state.merge_selected = "merge.txt".into();
     state.merge_files.insert(
         "merge.txt".into(),

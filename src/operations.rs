@@ -40,12 +40,14 @@ impl State {
             if let Some(running) = self.running.take() {
                 api::guest::close_resource(running.handle)?;
             }
-            self.message = self
-                .label(
+            self.report(
+                Severity::Information,
+                self.label(
                     "已停止进程；正在重新检查实际 Git 状态",
                     "Process stopped; rechecking actual Git state",
                 )
-                .into();
+                .into(),
+            );
             self.refresh();
             return Ok(());
         }
@@ -176,7 +178,7 @@ impl State {
                 },
                 "visibility",
             )?;
-            self.message=self.label("勾选本次需要提交的文件并填写提交说明；提交后将重新检查工作区", "Select files for this commit and enter a message; the worktree is checked again after commit").into();
+            self.report(Severity::Information, self.label("勾选本次需要提交的文件并填写提交说明；提交后将重新检查工作区", "Select files for this commit and enter a message; the worktree is checked again after commit").into());
             return Ok(());
         }
         if panel == Some("conflicts")

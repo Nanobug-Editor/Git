@@ -117,13 +117,19 @@ impl State {
         }
         if code != 0 {
             self.automatic_observation = false;
-            self.message = safe_diagnostic(&running.stderr);
-            if matches!(running.command.purpose, Purpose::PushAfterCommit { .. }) {
-                self.message = format!(
-                    "提交已成功，推送失败；本地提交已保留 / Commit succeeded, push failed; local commit retained: {}",
-                    self.message
-                );
-            }
+            let message = safe_diagnostic(&running.stderr);
+            // Choose one complete cause before publication; cleanup mirrors this exact Failure.
+            let error = failure(
+                if matches!(running.command.purpose, Purpose::PushAfterCommit { .. }) {
+                    format!(
+                        "提交已成功，推送失败；本地提交已保留 / Commit succeeded, push failed; local commit retained: {}",
+                        message
+                    )
+                } else {
+                    message
+                },
+            );
+            self.report(Severity::Error, error.to_string());
             if matches!(running.command.purpose, Purpose::PushAfterCommit { .. })
                 || running
                     .command
@@ -137,10 +143,7 @@ impl State {
                 self.history_error = self.message.clone();
                 self.history_extend_pending = false;
             }
-            self.fail_panel_activity(
-                running.command.feedback_owner(),
-                &failure(self.message.clone()),
-            );
+            self.fail_panel_activity(running.command.feedback_owner(), &error);
             // A failed native write can already have changed refs/index or entered a conflict.
             // Reobserve actual Git state without claiming failure rolled it back.
             if matches!(
@@ -403,7 +406,7 @@ impl State {
                         .ok()
                         .map(|time| time.as_secs());
                 }
-                self.message = preference_error.map(|error| format!("Git 操作已完成，但最近分支保存失败 / Git operation completed, but recent branches could not be saved: {error}")).unwrap_or_else(|| "Git 操作完成 / Operation completed".into());
+                self.report(if preference_error.is_some() { Severity::Warning } else { Severity::Information }, preference_error.map(|error| format!("Git 操作已完成，但最近分支保存失败 / Git operation completed, but recent branches could not be saved: {error}")).unwrap_or_else(|| "Git 操作完成 / Operation completed".into()));
                 if running.command.changes_index_only() {
                     self.refresh_worktree();
                 } else {
@@ -420,13 +423,19 @@ impl State {
             }
             Purpose::Then(next) => {
                 if matches!(next.purpose, Purpose::PushAfterCommit { .. }) {
-                    self.message = "提交已成功，正在推送… / Commit succeeded, pushing…".into();
+                    self.report(
+                        Severity::Information,
+                        "提交已成功，正在推送… / Commit succeeded, pushing…".into(),
+                    );
                 }
                 self.enqueue_checked(*next)?;
             }
             Purpose::PushAfterCommit { next } => {
                 self.commit_submitting = false;
-                self.message = "提交并推送完成 / Commit and push completed".into();
+                self.report(
+                    Severity::Information,
+                    "提交并推送完成 / Commit and push completed".into(),
+                );
                 if let Some(next) = next {
                     // Resume a previously requested operation only after the usual fresh clean-tree review.
                     self.queue.push_front(Command::new(
@@ -448,12 +457,14 @@ impl State {
                 } else {
                     // This fresh dirty-worktree review replaces any previously revoked approval.
                     self.set_pending_review(*next, self.pending_panel.clone(), true);
-                    self.message = self
-                        .label(
+                    self.report(
+                        Severity::Warning,
+                        self.label(
                             "仍有未提交修改，请处理后继续",
                             "Uncommitted changes remain; review before continuing",
                         )
-                        .into();
+                        .into(),
+                    );
                 }
             }
             Purpose::LeaseSource { remote, reference } => {
@@ -562,7 +573,7 @@ impl State {
             Purpose::Guard { expected, next } => {
                 if running.output != expected {
                     self.patch = Default::default();
-                    self.message="Git 前置状态已变化，请重新检查操作 / Git preconditions changed; review the operation again".into();
+                    self.report(Severity::Warning, "Git 前置状态已变化，请重新检查操作 / Git preconditions changed; review the operation again".into());
                     self.queue.clear();
                     self.refresh();
                     return Ok(());

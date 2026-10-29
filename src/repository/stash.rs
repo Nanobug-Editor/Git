@@ -124,23 +124,27 @@ impl State {
         code: u32,
     ) -> Result<(), api::Failure> {
         if code != 0 {
-            self.repository_error(&stderr);
             if matches!(query, Query::StashApplied { .. }) {
-                self.message = format!(
-                    "{}\n{}",
-                    self.message,
-                    self.label(
-                        "Stash 已保留；检查冲突后再继续",
-                        "The stash was retained; inspect conflicts before continuing"
-                    )
+                self.report(
+                    Severity::Error,
+                    format!(
+                        "{}\n{}",
+                        self.repository_failure_message(&stderr),
+                        self.label(
+                            "Stash 已保留；检查冲突后再继续",
+                            "The stash was retained; inspect conflicts before continuing"
+                        )
+                    ),
                 );
                 self.refresh();
             } else if let Query::StashVerifySelector { applied, .. } = query {
-                self.message = self.label(
+                self.report(Severity::Warning, self.label(
                     if applied { "内容已应用，但 Stash 列表已变化；保留记录，请刷新后决定是否删除" } else { "Stash 列表已变化；未删除任何记录，请刷新" },
                     if applied { "Changes were applied, but the stash list changed; the entry was kept. Refresh before deleting it" } else { "The stash list changed; no entry was deleted. Refresh it" },
-                ).into();
+                ).into());
                 self.repository_stashes(0);
+            } else {
+                self.report(Severity::Error, self.repository_failure_message(&stderr));
             }
             return Ok(());
         }
@@ -217,9 +221,11 @@ impl State {
                     )));
                 }
                 if changes.is_empty() {
-                    self.message = self
-                        .label("没有可存储的修改", "There are no changes to stash")
-                        .into();
+                    self.report(
+                        Severity::Information,
+                        self.label("没有可存储的修改", "There are no changes to stash")
+                            .into(),
+                    );
                 } else {
                     self.repository.create_files = changes;
                     self.repository.create_status = output;
@@ -240,12 +246,14 @@ impl State {
                 ))?;
             }
             Query::StashCreated => {
-                self.message = self
-                    .label(
+                self.report(
+                    Severity::Information,
+                    self.label(
                         "Stash 已创建，包含未跟踪文件，排除忽略文件",
                         "Stash created with untracked files; ignored files were excluded",
                     )
-                    .into();
+                    .into(),
+                );
                 self.refresh();
                 self.repository_stashes(0);
             }
@@ -253,18 +261,20 @@ impl State {
                 if drop_after {
                     self.repository_verify_stash(stash, true);
                 } else {
-                    self.message = self
-                        .label("已应用并保留 Stash", "Stash applied and retained")
-                        .into();
+                    self.report(
+                        Severity::Information,
+                        self.label("已应用并保留 Stash", "Stash applied and retained")
+                            .into(),
+                    );
                     self.refresh();
                 }
             }
             Query::StashVerifySelector { stash, applied } => {
                 if model::oid(&output).map_err(failure)? != stash.oid {
-                    self.message = self.label(
+                    self.report(Severity::Warning, self.label(
                         if applied { "已应用内容；Stash 位置已变化，保留记录，请刷新后再删除" } else { "Stash 位置已变化；未删除记录，请刷新" },
                         if applied { "Changes applied; the stash moved and was retained. Refresh before deleting it" } else { "The stash moved; no entry was deleted. Refresh it" },
-                    ).into();
+                    ).into());
                     self.repository_stashes(0);
                 } else {
                     // Git owns its reflog lock. This immediately preceding selector check rejects
@@ -276,7 +286,10 @@ impl State {
                 }
             }
             Query::StashDropped => {
-                self.message = self.label("Stash 记录已删除", "Stash entry deleted").into();
+                self.report(
+                    Severity::Information,
+                    self.label("Stash 记录已删除", "Stash entry deleted").into(),
+                );
                 self.refresh();
                 self.repository_stashes(0);
             }

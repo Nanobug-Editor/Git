@@ -227,7 +227,7 @@ impl State {
             || !same_selection
             || current.iter().any(|change| change.conflict)
         {
-            self.message = "提交范围或 Git 状态已变化，请检查后重试 / Commit selection or Git state changed; review and retry".into();
+            self.report(Severity::Warning, "提交范围或 Git 状态已变化，请检查后重试 / Commit selection or Git state changed; review and retry".into());
             self.commit_submit_error = Some(self.message.clone());
             self.commit_submitting = false;
             self.queue.clear();

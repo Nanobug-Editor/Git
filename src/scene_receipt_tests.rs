@@ -1,6 +1,141 @@
 //! Skipped timer observations keep the currently painted native scene's input authority.
 use super::*;
 
+/// A native comparison's large source must not also be serialized into its hidden legacy window.
+#[test]
+fn hidden_comparison_windows_do_not_serialize_source_snapshots() {
+    let text = "hidden-source-中文\\\"\n".repeat(10_000);
+    let mut state = State {
+        columns: vec![text.clone(), text],
+        ..Default::default()
+    };
+    let views = state.views();
+    let hidden = views
+        .iter()
+        .find(|view| view.panel == "commit-details")
+        .unwrap();
+    let encoded = serde_json::to_string(hidden).unwrap();
+    assert!(
+        !encoded.contains("hidden-source"),
+        "hidden snapshots consumed the guest serialization budget"
+    );
+    assert!(encoded.len() < 4096);
+    // Explicitly opening the secondary view restores its complete original sources.
+    state.visible_panels.insert("commit-details".into(), true);
+    let visible = state
+        .views()
+        .into_iter()
+        .find(|view| view.panel == "commit-details")
+        .unwrap();
+    assert!(visible.document.active_node("snapshot-0").is_some());
+    assert!(
+        serde_json::to_string(&visible)
+            .unwrap()
+            .contains("hidden-source")
+    );
+}
+
+/// Native focus/viewport observations must not rebuild Git's retained business scenes.
+#[test]
+fn passive_document_dispatch_keeps_the_admitted_scene() {
+    let subscription = api::ResourceHandle {
+        instance: "passive-documents".into(),
+        scope: "workspace".into(),
+        resource: 2,
+    };
+    STATE.with(|cell| {
+        *cell.borrow_mut() = State {
+            revision: 7,
+            document_subscription: Some(subscription.clone()),
+            ..Default::default()
+        };
+    });
+    for sequence in 1..=32 {
+        let document = api::DocumentVersion {
+            id: "unrelated-native-source".into(),
+            path: "unrelated.txt".into(),
+            revision: 1,
+        };
+        let kind = match sequence % 3 {
+            0 => api::DocumentEventKind::ActiveChanged(Some(document)),
+            1 => api::DocumentEventKind::ViewportChanged {
+                document,
+                visible_rows: None,
+            },
+            _ => api::DocumentEventKind::SelectionChanged {
+                document,
+                selection: api::TextRange {
+                    start: 0,
+                    end: sequence as usize,
+                },
+            },
+        };
+        let invocation = api::Invocation {
+            id: sequence,
+            message: api::Input::Event {
+                panel: None,
+                event: api::Notification::DocumentEvent {
+                    subscription: subscription.clone(),
+                    event: api::DocumentEvent {
+                        sequence,
+                        resource: None,
+                        kind,
+                    },
+                },
+            },
+        };
+        let reply: api::Completion = serde_json::from_str(
+            &dispatch_with(
+                serde_json::to_string(&invocation).unwrap(),
+                |_, _| panic!("passive metadata must not start Git work"),
+                feedback::accept,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(reply.result.unwrap().views.is_empty());
+        STATE.with(|cell| assert_eq!(cell.borrow().revision, 7));
+    }
+    STATE.with(|cell| *cell.borrow_mut() = State::default());
+}
+
+/// Stream loss belongs to host diagnostics, not a permanent error beneath commit metadata.
+#[test]
+fn document_stream_failure_is_absent_from_history_business_view() {
+    let subscription = api::ResourceHandle {
+        instance: "failed-documents".into(),
+        scope: "workspace".into(),
+        resource: 2,
+    };
+    let mut state = State {
+        document_subscription: Some(subscription.clone()),
+        ..Default::default()
+    };
+    state
+        .event(
+            None,
+            api::Notification::SubscriptionFailed {
+                subscription,
+                error: api::Failure::new(
+                    api::ErrorCode::LimitExceeded,
+                    "Document stream overflow; enumerate and resubscribe",
+                ),
+            },
+        )
+        .unwrap();
+    state.retain_panel_feedback(panel_activity::FeedbackOwner::Shared, "");
+    let document = ui::Document::new(state.history_preview());
+    assert!(document.active_node("history-status").is_none());
+    assert!(document.active_node("history-error").is_none());
+    let _ = feedback::take_notices();
+    state.collect_feedback("", None);
+    state.flush_feedback(feedback::accept).unwrap();
+    assert!(feedback::take_notices().iter().any(|notice| matches!(notice,
+        plugin_protocol::interaction::Operation::PublishMessage { severity: Severity::Warning, message, .. }
+            if message.contains("Document stream overflow")
+    )));
+}
+
 /// Foreign resources are filtered before the dispatcher can preempt the current readonly query.
 #[test]
 fn unrelated_resource_dispatch_preserves_inflight_background_query_and_scene() {
@@ -52,7 +187,7 @@ fn unrelated_resource_dispatch_preserves_inflight_background_query_and_scene() {
             message: api::Input::Event { panel: None, event },
         };
         let reply: api::Completion = serde_json::from_str(
-            &GitPlugin::dispatch(serde_json::to_string(&invocation).unwrap()).unwrap(),
+            &feedback::dispatch(serde_json::to_string(&invocation).unwrap()).unwrap(),
         )
         .unwrap();
         assert!(reply.result.unwrap().views.is_empty());
@@ -132,7 +267,7 @@ fn skipped_timer_dispatch_preserves_the_admitted_scene() {
             },
         };
         let completion: api::Completion = serde_json::from_str(
-            &GitPlugin::dispatch(serde_json::to_string(&input).unwrap()).unwrap(),
+            &feedback::dispatch(serde_json::to_string(&input).unwrap()).unwrap(),
         )
         .unwrap();
         let output = completion.result.unwrap();

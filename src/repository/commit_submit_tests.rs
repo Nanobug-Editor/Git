@@ -2,6 +2,99 @@
 
 use super::*;
 
+/// Stash keeps its own empty/preview state and draft text while diagnostics have only the host owner.
+#[test]
+fn stash_dialog_keeps_business_content_and_publishes_diagnostics_only_to_host() {
+    for severity in [Severity::Error, Severity::Warning] {
+        let mut state = State::default();
+        state.commit_message = "real commit draft remains editable".into();
+        state.repository.dialog = Some(Dialog::Stashes);
+        state.report(severity, "unique-stash-operation-diagnostic".into());
+        let views = state.views();
+        let history = views.iter().find(|view| view.panel == "history").unwrap();
+        let dialog = history.document.dialog.as_ref().unwrap();
+        let stash = ui::Document::new(dialog.content.clone());
+        assert!(stash.active_node("repo-stash-message").is_none());
+        assert!(stash.active_node("repo-stash-empty").is_some());
+        assert!(stash.active_node("repo-stash-preview-pending").is_some());
+        let encoded = serde_json::to_string(&views).unwrap();
+        assert!(!encoded.contains("unique-stash-operation-diagnostic"));
+        assert!(encoded.contains("real commit draft remains editable"));
+        state.collect_feedback("", None);
+        let _ = feedback::take_notices();
+        state.flush_feedback(feedback::accept).unwrap();
+        let notices = feedback::take_notices();
+        assert_eq!(notices.len(), 1);
+        assert!(
+            matches!(&notices[0], plugin_protocol::interaction::Operation::PublishMessage { message, .. }
+            if message == "unique-stash-operation-diagnostic")
+        );
+    }
+}
+
+/// Repository policy may explain one stderr cause, but only the selected complete explanation is emitted.
+#[test]
+fn single_cause_repository_policy_and_stash_failures_publish_once() {
+    let stash = Stash {
+        selector: "stash@{0}".into(),
+        oid: "a".repeat(40),
+        title: "saved".into(),
+        time: "0".into(),
+    };
+    for (query, stderr, warning, expected) in [
+        (Query::Fetch, "", false, "Git operation failed"),
+        (
+            Query::PullBranch { strategy: None },
+            "fatal: symbolic-ref failed",
+            true,
+            "upstream",
+        ),
+        (
+            Query::StashApplied {
+                stash: stash.clone(),
+                drop_after: false,
+            },
+            "fatal: apply rejected",
+            false,
+            "stash was retained",
+        ),
+        (
+            Query::StashVerifySelector {
+                stash,
+                applied: true,
+            },
+            "fatal: selector expired",
+            true,
+            "stash list changed",
+        ),
+    ] {
+        let mut state = State::default();
+        state.environment.locale = "en-US".into();
+        state
+            .repository_finished(query, Vec::new(), stderr.as_bytes().into(), 1)
+            .unwrap();
+        state.collect_feedback("", None);
+        let _ = feedback::take_notices();
+        state.flush_feedback(feedback::accept).unwrap();
+        let notices = feedback::take_notices();
+        assert_eq!(notices.len(), 1, "{expected}");
+        let plugin_protocol::interaction::Operation::PublishMessage {
+            severity, message, ..
+        } = &notices[0]
+        else {
+            panic!("public message");
+        };
+        assert!(matches!(
+            (warning, severity),
+            (true, Severity::Warning) | (false, Severity::Error)
+        ));
+        assert!(
+            message.to_lowercase().contains(&expected.to_lowercase()),
+            "{message}"
+        );
+    }
+}
+
 /// A real repository identity and draft make button availability depend only on index observation.
 fn ready() -> State {
     let mut state = State::default();
