@@ -53,7 +53,9 @@ impl State {
                 &running.handle == handle
                     && matches!(
                         running.command.purpose,
-                        Purpose::HistoryBlob { .. } | Purpose::Snapshot { .. }
+                        Purpose::HistoryBlob { .. }
+                            | Purpose::HistoryBatch { .. }
+                            | Purpose::Snapshot { .. }
                     )
             }),
             api::Input::Event {
@@ -155,6 +157,21 @@ impl State {
         selection: ComparisonSelection,
     ) -> Result<(), api::Failure> {
         let history = selection.history();
+        if history && self.history_comparison_only() {
+            // Tree clicks and toolbar arrows share latest-selection semantics. Cancel only this
+            // readonly flight, preserving unrelated writes and the sibling commit surface.
+            if self.running.as_ref().is_some_and(|running| {
+                matches!(
+                    running.command.purpose,
+                    Purpose::HistoryBlob { .. }
+                        | Purpose::HistoryBatch { .. }
+                        | Purpose::Snapshot { .. }
+                )
+            }) {
+                self.cancel_history_source(api::guest::close_resource)?;
+            }
+            self.abort_diff(None);
+        }
         self.pending_comparisons
             .retain(|old| old.history() != history);
         self.pending_comparisons.push_back(selection);
@@ -204,6 +221,7 @@ impl State {
                     matches!(
                         command.purpose,
                         Purpose::HistoryBlob { .. }
+                            | Purpose::HistoryBatch { .. }
                             | Purpose::Snapshot { .. }
                             | Purpose::Log { .. }
                             | Purpose::Files(_)

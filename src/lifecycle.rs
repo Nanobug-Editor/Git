@@ -107,6 +107,8 @@ impl State {
     /// Revoke event matching before one bounded cleanup pass. An incomplete report leaves the
     /// group in State and prevents reset/replacement until a later explicit attempt succeeds.
     pub(super) fn close_background_resources(&mut self) -> Result<(), api::Failure> {
+        // Preparing a replacement State must not discard a failed speculative-process release.
+        self.cancel_history_prefetch(api::guest::close_resource)?;
         self.refresh_timer = None;
         self.document_subscription = None;
         let report = self.background_resources.close_all();

@@ -38,6 +38,13 @@ impl Entry {
 }
 
 impl HistorySources {
+    /// Speculative admission checks identity without cloning or promoting retained text.
+    pub(super) fn contains(&self, workspace: &str, oid: &str, path: &str) -> bool {
+        self.entries
+            .iter()
+            .any(|entry| entry.matches(workspace, oid, path))
+    }
+
     /// Outer `None` is a miss; a hit retains whether Git observed absence or a complete text blob.
     pub(super) fn get(&mut self, workspace: &str, oid: &str, path: &str) -> Option<Option<String>> {
         let index = self

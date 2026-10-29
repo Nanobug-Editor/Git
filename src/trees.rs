@@ -21,6 +21,18 @@ impl State {
     pub(super) fn tree_event(&mut self, event: tree::Event) -> Result<bool, api::Failure> {
         match event {
             tree::Event::Request(request) => {
+                // A full immutable forest can overtake a previously queued lazy request. The
+                // host patch already retired its credentials; do not regenerate partial metadata
+                // or surface the expected stale-reply failure as a user-visible plugin error.
+                if self.trees.get("files") == Some(&request.tree)
+                    && self.tree_pages.get("files").is_some_and(|pages| {
+                        pages
+                            .get(&request.parent)
+                            .is_some_and(|page| page.next.is_none())
+                    })
+                {
+                    return Ok(false);
+                }
                 let page = self.tree_page(&request);
                 tree::reply(request.clone(), page.clone())?;
                 if let Ok(page) = page {

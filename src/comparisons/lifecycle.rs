@@ -34,6 +34,78 @@ pub(crate) fn is_diff_intent(intent: &str) -> bool {
 }
 
 impl State {
+    /// A terminal metadata gap removes reuse authority, while existing native tabs keep their
+    /// own resources and frozen navigation. A failed replacement must not restore those versions.
+    pub(crate) fn forget_unobserved_diff_sources(&mut self) {
+        let clear = |sources: &mut DiffSources| {
+            sources.left = None;
+            sources.right = None;
+            sources.third = None;
+        };
+        for sources in self.diff_views.values_mut() {
+            clear(sources);
+        }
+        if let Some(previous) = self
+            .diff_flight
+            .as_mut()
+            .and_then(|flight| flight.previous.as_mut())
+        {
+            clear(previous);
+        }
+    }
+
+    /// A user-requested comparison may reacquire its observation once after a terminal failure.
+    /// Ordinary notifications never retry; failed admission remains visible to that same intent.
+    pub(crate) fn ensure_diff_observation(&mut self) -> Result<(), api::Failure> {
+        if self.document_subscription.is_none() {
+            self.forget_unobserved_diff_sources();
+            self.document_subscription = Some(self.background_resources.documents()?);
+        }
+        Ok(())
+    }
+
+    /// Forget only the rejected cached pane, including the rollback copy of this same flight.
+    /// Native source ownership is untouched; the next operation must obtain a fresh capability.
+    pub(crate) fn forget_rejected_diff_source(&mut self, column: usize) {
+        let clear = |sources: &mut DiffSources| match column {
+            0 => sources.left = None,
+            1 => sources.right = None,
+            _ => sources.third = None,
+        };
+        if let Some(sources) = self.diff_views.get_mut(&self.diff_key) {
+            clear(sources);
+        }
+        if let Some(previous) = self
+            .diff_flight
+            .as_mut()
+            .and_then(|flight| flight.previous.as_mut())
+        {
+            clear(previous);
+        }
+    }
+
+    /// Only a rejected refresh can be renewed. Its replacement is tracked as a new allocation,
+    /// so another failure cannot retry again or bypass the host's ordinary ownership admission.
+    pub(crate) fn renew_diff_snapshot(
+        &mut self,
+        intent: &str,
+        new_source: bool,
+        error: &api::Failure,
+    ) -> Result<bool, api::Failure> {
+        if new_source || self.diff_flight.is_none() || !expired_source(error) {
+            return Ok(false);
+        }
+        let column = match intent {
+            "diff-left" => 0,
+            "diff-right" => 1,
+            "diff-third" => 2,
+            _ => return Ok(false),
+        };
+        self.forget_rejected_diff_source(column);
+        self.open_diff_snapshot(column)?;
+        Ok(true)
+    }
+
     /// Capture an intent's existing cache before a new hidden source can replace any entry.
     pub(crate) fn begin_diff_flight(&mut self, history: bool) {
         self.diff_flight = Some(Flight {
@@ -108,9 +180,15 @@ impl State {
 
     /// Successful native admission transfers source cleanup to its retained view descriptor.
     pub(crate) fn complete_diff_flight(&mut self) {
+        // Reveal follows native success. A tree failure cannot roll back sources already owned
+        // by the visible comparison, but remains visible as a separate history diagnostic.
+        if let Err(error) = self.reveal_completed_history_file() {
+            self.history_error = error.to_string();
+        }
         if let Some(sources) = self.diff_views.get_mut(&self.diff_key) {
             sources.navigation = self.diff_navigation.take();
         }
+        self.schedule_history_prefetch();
         if let Some(flight) = self.diff_flight.take() {
             self.release_diff_local_sources(flight.local_sources.into_values());
         }
@@ -159,6 +237,7 @@ impl State {
                 command.purpose,
                 Purpose::DiffSnapshot { .. }
                     | Purpose::HistoryBlob { .. }
+                    | Purpose::HistoryBatch { .. }
                     | Purpose::Snapshot { .. }
                     | Purpose::Patch { .. }
             )
@@ -196,4 +275,15 @@ impl State {
             );
         }
     }
+}
+
+/// A cached document may outlive its close notification; unrelated operational failures are final.
+pub(super) fn expired_source(error: &api::Failure) -> bool {
+    matches!(
+        error.code,
+        api::ErrorCode::PermissionDenied
+            | api::ErrorCode::InvalidHandle
+            | api::ErrorCode::StaleRevision
+            | api::ErrorCode::NotFound
+    )
 }

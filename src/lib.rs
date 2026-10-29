@@ -8,6 +8,8 @@ mod diagnostic;
 mod events;
 mod graph;
 mod history;
+#[cfg(test)]
+mod history_dispatch_tests;
 mod history_preview;
 mod lifecycle;
 mod merge;
@@ -202,6 +204,8 @@ struct State {
     diff_views: BTreeMap<String, DiffSources>,
     /// Immutable historical text is bounded and separate from editable worktree/index documents.
     history_sources: comparisons::HistorySources,
+    /// At most two neighbors wait outside the business queue and yield to every explicit action.
+    history_prefetch: VecDeque<comparisons::HistoryPrefetch>,
     /// One comparison intent owns only its pending requests and newly allocated readonly sources.
     diff_flight: Option<comparisons::Flight>,
     rebase_draft: Option<rebase_model::Plan>,
@@ -252,8 +256,18 @@ struct GitPlugin;
 impl Guest for GitPlugin {
     /// Each event is correlated to this incarnation; late resource notifications are ignored.
     fn dispatch(payload: String) -> Result<String, String> {
-        api::guest::dispatch(&payload, |input| {
-            STATE.with(|cell| {
+        dispatch_with(payload, Command::launch)
+    }
+}
+
+/// Keep process transport at the dispatcher boundary while every receipt uses the same state
+/// transitions and publication filtering. Native unit tests substitute only the launch transport.
+fn dispatch_with(
+    payload: String,
+    mut launch: impl FnMut(&Command, &str) -> Result<Running, api::Failure>,
+) -> Result<String, String> {
+    api::guest::dispatch(&payload, |input| {
+        STATE.with(|cell| {
                 let mut state = cell.borrow_mut();
                 // Configuration has its own pure validation/hot repaint path. It must not cancel
                 // an automatic Git read, pump queued commands or republish the commit form.
@@ -270,6 +284,7 @@ impl Guest for GitPlugin {
                 }
                 let initializing = matches!(&input, api::Input::Prepare { .. } | api::Input::Activate);
                 let was_busy = state.busy();
+                let was_history_loading = state.history_loading;
                 let feedback_owner = state.feedback_owner(&input);
                 let previous_message = state.message.clone();
                 let comparison_only = state.history_comparison_event(&input);
@@ -296,6 +311,8 @@ impl Guest for GitPlugin {
                     api::Input::Event { event: api::Notification::Process { .. }, .. });
                 let background_event = observation::is_background_event(&input);
                 if observation::interrupts(&input) {
+                    // A failed optional close keeps the handle owned until exit or another input.
+                    let _ = state.cancel_history_prefetch(api::guest::close_resource);
                     state.cancel_automatic_observation()?;
                 }
                 if state.is_user_activity(&input) {
@@ -371,12 +388,13 @@ impl Guest for GitPlugin {
                 state.resume_pending_history_filter();
                 state.resume_history_page();
                 state.resume_comparison_selection()?;
-                repaint |= state.pump();
+                state.resume_history_prefetch();
+                repaint |= state.pump_with(&mut launch);
                 // A synchronous launch failure can finish the last business item. Resume an
                 // already requested explicit observation once; internal refreshes never set it.
                 if state.resume_explicit_refresh() {
                     repaint = true;
-                    repaint |= state.pump();
+                    repaint |= state.pump_with(&mut launch);
                 }
                 if was_busy && !state.busy() {
                     state.refresh_quiet_at = Some(std::time::Instant::now());
@@ -384,7 +402,14 @@ impl Guest for GitPlugin {
                 // A timer's internal busy/probe transitions do not own the user's controls.
                 // Changed data and failures explicitly end the silent observation first.
                 state.retain_panel_feedback(feedback_owner, &previous_message);
-                let views = if repaint && !(background_event && state.automatic_observation) {
+                // Completing the selected preview owns one required publication. A focus/save
+                // received during that query may already have started the next silent read above;
+                // its new observation cannot suppress the previous query's now-clickable tree.
+                let preview_ready = was_history_loading && !state.history_loading && !failed
+                    && state.history_preview_commit.as_ref()
+                        .is_some_and(|commit| commit.oid == state.selected);
+                let views = if (repaint || preview_ready)
+                    && (preview_ready || !(background_event && state.automatic_observation)) {
                     if (range_only || filter_only || history_receipt) && !failed && !state.ui_busy() {
                         let views = state.history_scroll_view();
                         state.changed_views(views)
@@ -404,8 +429,7 @@ impl Guest for GitPlugin {
                     ..Default::default()
                 })
             })
-        })
-    }
+    })
 }
 export!(GitPlugin);
 
@@ -492,7 +516,8 @@ impl State {
     }
     /// Only business queues own disabled controls; current input can retire optional Git reads first.
     fn ui_busy(&self) -> bool {
-        !self.background_read
+        !self.history_prefetch_only()
+            && !self.background_read
             && !self.history_reads_only()
             && !self.history_comparison_only()
             && self.busy()
@@ -611,11 +636,6 @@ impl State {
             },
         ));
     }
-    /// Backpressure remains inside the native transport; launch failures require visible feedback.
-    fn pump(&mut self) -> bool {
-        self.pump_with(Command::launch)
-    }
-
     /// The process boundary reports synchronous errors separately from later completion receipts.
     fn pump_with(
         &mut self,
@@ -628,6 +648,10 @@ impl State {
             match launch(&command, &self.environment.workspace) {
                 Ok(running) => self.running = Some(running),
                 Err(error) => {
+                    if matches!(command.purpose, Purpose::HistoryPrefetch(_)) {
+                        // An optional miss cannot revoke queued writes or the visible comparison.
+                        return false;
+                    }
                     self.automatic_observation = false;
                     self.message = error.to_string();
                     if matches!(command.purpose, Purpose::PushAfterCommit { .. }) {

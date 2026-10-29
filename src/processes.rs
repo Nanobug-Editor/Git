@@ -48,6 +48,13 @@ pub(crate) enum Purpose {
     HistoryBlob {
         column: usize,
     },
+    /// One immutable batch resolves every uncached side of the selected historical file.
+    HistoryBatch {
+        columns: Vec<usize>,
+        path: String,
+    },
+    /// Optional immutable neighbor contents never own a native source, selection or diagnostic.
+    HistoryPrefetch(crate::comparisons::HistoryPrefetch),
     MergeSnapshot {
         path: String,
         column: usize,
@@ -212,8 +219,7 @@ impl Command {
                     bytes: bytes.clone(),
                 },
             }) {
-                let _ = api::guest::close_resource(handle);
-                return Err(error);
+                return self.failed_launch(handle, error, api::guest::close_resource);
             }
         }
         if let Err(error) = api::guest::request(api::Operation::Process {
@@ -221,8 +227,7 @@ impl Command {
                 handle: handle.clone(),
             },
         }) {
-            let _ = api::guest::close_resource(handle);
-            return Err(error);
+            return self.failed_launch(handle, error, api::guest::close_resource);
         }
         Ok(Running {
             handle,
@@ -230,5 +235,29 @@ impl Command {
             output: Vec::new(),
             stderr: Vec::new(),
         })
+    }
+
+    /// Optional stdin/EOF failures must retain an allocated child if its release also fails.
+    /// The discarded request cannot cache bytes and remains owned until exit or a later close.
+    pub(crate) fn failed_launch(
+        &self,
+        handle: api::ResourceHandle,
+        error: api::Failure,
+        close: impl FnOnce(api::ResourceHandle) -> Result<(), api::Failure>,
+    ) -> Result<Running, api::Failure> {
+        let closed = close(handle.clone());
+        let mut command = self.clone();
+        if closed.is_err()
+            && let Purpose::HistoryPrefetch(request) = &mut command.purpose
+        {
+            request.discarded = true;
+            return Ok(Running {
+                handle,
+                command,
+                output: Vec::new(),
+                stderr: Vec::new(),
+            });
+        }
+        Err(error)
     }
 }

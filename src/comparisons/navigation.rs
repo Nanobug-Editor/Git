@@ -11,9 +11,21 @@ pub(crate) struct HistoryNavigation {
     files: Arc<[String]>,
     /// Index of the source comparison; absence of an adjacent index disables that native arrow.
     index: usize,
+    /// Only a confirmed boundary gesture changes the new view's initial content position.
+    position: api::ComparisonPosition,
 }
 
 impl HistoryNavigation {
+    /// Only the next and previous immutable neighbors may be prepared after visible admission.
+    pub(super) fn neighboring_sources(&self) -> impl Iterator<Item = (&[String], &str)> {
+        self.index
+            .checked_add(1)
+            .into_iter()
+            .chain(self.index.checked_sub(1))
+            .filter_map(|index| self.files.get(index))
+            .map(|path| (self.targets.as_slice(), path.as_str()))
+    }
+
     /// Capture only a file from the accepted preview; legacy detail-only reads have no arrow sequence.
     pub(super) fn capture(targets: Vec<String>, files: Vec<String>, path: &str) -> Option<Self> {
         let index = files.iter().position(|file| file == path)?;
@@ -21,6 +33,7 @@ impl HistoryNavigation {
             targets,
             files: files.into(),
             index,
+            position: api::ComparisonPosition::FirstDifference,
         })
     }
 
@@ -34,6 +47,7 @@ impl HistoryNavigation {
             .ok_or_else(|| failure("相邻文件已失效 / Adjacent file is no longer available"))?;
         Ok(Self {
             index,
+            position: api::ComparisonPosition::FirstDifference,
             ..self.clone()
         })
     }
@@ -49,6 +63,18 @@ impl HistoryNavigation {
         api::ComparisonNavigation {
             previous: self.index.checked_sub(1).and_then(action),
             next: action(self.index + 1),
+            previous_boundary: self
+                .index
+                .checked_sub(1)
+                .and_then(action)
+                .map(|mut command| {
+                    command.arguments["position"] = "end".into();
+                    command
+                }),
+            next_boundary: action(self.index + 1).map(|mut command| {
+                command.arguments["position"] = "start".into();
+                command
+            }),
         }
     }
 }
@@ -59,6 +85,14 @@ impl State {
         self.diff_navigation
             .as_ref()
             .map(|context| context.descriptor(&self.diff_key))
+    }
+
+    /// The initial viewport belongs to the captured file intent, never a later toolbar click.
+    pub(crate) fn comparison_position(&self) -> api::ComparisonPosition {
+        self.diff_navigation
+            .as_ref()
+            .map(|context| context.position)
+            .unwrap_or_default()
     }
 
     /// Resolve an owned retained comparison before starting any asynchronous Git read.
@@ -74,12 +108,18 @@ impl State {
             .get("path")
             .and_then(|value| value.as_str())
             .ok_or_else(|| failure("Missing adjacent path"))?;
-        let context = self
+        let mut context = self
             .diff_views
             .get(key)
             .and_then(|sources| sources.navigation.as_ref())
             .ok_or_else(|| failure("比较已关闭 / Comparison is closed"))?
             .adjacent(path)?;
+        context.position = match arguments.get("position").and_then(|value| value.as_str()) {
+            None | Some("first_difference") => api::ComparisonPosition::FirstDifference,
+            Some("start") => api::ComparisonPosition::Start,
+            Some("end") => api::ComparisonPosition::End,
+            _ => return Err(failure("Invalid comparison position")),
+        };
         Ok((path.into(), context))
     }
 
@@ -90,19 +130,6 @@ impl State {
     ) -> Result<(), api::Failure> {
         let (path, context) = self.adjacent_history_context(arguments)?;
         let origin = arguments["view"].as_str().unwrap().to_owned();
-        if self.history_comparison_only() {
-            // Only this readonly flight may yield. Retiring its exact capability/correlations
-            // prevents late Git or native receipts from opening an older neighboring file.
-            if self.running.as_ref().is_some_and(|running| {
-                matches!(
-                    running.command.purpose,
-                    Purpose::HistoryBlob { .. } | Purpose::Snapshot { .. }
-                )
-            }) {
-                self.cancel_history_source(api::guest::close_resource)?;
-            }
-            self.abort_diff(None);
-        }
         // Other work keeps its authority; coalesce the latest arrow and recheck its origin at idle.
         self.request_comparison(panel_activity::ComparisonSelection::Adjacent {
             origin,
@@ -112,7 +139,7 @@ impl State {
     }
 
     /// Retain process authority if transport release fails; only a confirmed close clears ownership.
-    fn cancel_history_source(
+    pub(crate) fn cancel_history_source(
         &mut self,
         close: impl FnOnce(api::ResourceHandle) -> Result<(), api::Failure>,
     ) -> Result<(), api::Failure> {
@@ -134,6 +161,23 @@ impl State {
         self.diff_navigation = Some(context);
         self.queue_history_sources(path);
         self.start_history_diff(path)
+    }
+
+    /// Follow only a successfully opened comparison in the currently displayed commit tree.
+    /// A retained preview from another commit keeps its navigation without replacing that tree.
+    pub(crate) fn reveal_completed_history_file(&self) -> Result<(), api::Failure> {
+        let Some(context) = &self.diff_navigation else {
+            return Ok(());
+        };
+        if context.targets.get(1) == Some(&self.selected)
+            && self
+                .history_preview_commit
+                .as_ref()
+                .is_some_and(|commit| commit.oid == self.selected)
+        {
+            self.reveal_history_path(&context.files[context.index])?;
+        }
+        Ok(())
     }
 }
 
@@ -273,12 +317,12 @@ mod tests {
                 assert!(state.diff_flight.is_none());
             } else {
                 assert_eq!(state.diff_path, "c");
-                assert_eq!(state.queue.len(), 2);
+                assert_eq!(state.queue.len(), 1);
                 assert!(
                     state
                         .queue
                         .iter()
-                        .all(|command| matches!(command.purpose, Purpose::HistoryBlob { .. }))
+                        .all(|command| matches!(command.purpose, Purpose::HistoryBatch { .. }))
                 );
             }
         }
@@ -374,5 +418,49 @@ mod tests {
             assert!(state.adjacent_history_context(&arguments).is_err());
         }
         assert_eq!(state.selected, "other");
+    }
+
+    /// Only boundary commands carry an edge; a later ordinary arrow returns to first-difference.
+    #[test]
+    fn boundary_commands_keep_position_with_the_captured_neighbor() {
+        let context = HistoryNavigation::capture(
+            vec!["parent".into(), "commit".into()],
+            vec!["a".into(), "b".into(), "c".into()],
+            "b",
+        )
+        .unwrap();
+        let descriptor = context.descriptor("view");
+        assert_eq!(
+            descriptor.previous_boundary.as_ref().unwrap().arguments["position"],
+            "end"
+        );
+        assert_eq!(
+            descriptor.next_boundary.as_ref().unwrap().arguments["position"],
+            "start"
+        );
+        let mut state = State::default();
+        state.diff_views.insert(
+            "view".into(),
+            DiffSources {
+                navigation: Some(context),
+                ..Default::default()
+            },
+        );
+        let (_, end) = state
+            .adjacent_history_context(&descriptor.previous_boundary.unwrap().arguments)
+            .unwrap();
+        assert_eq!(end.position, api::ComparisonPosition::End);
+        assert!(end.descriptor("end").previous_boundary.is_none());
+        assert_eq!(
+            end.adjacent("b").unwrap().position,
+            api::ComparisonPosition::FirstDifference
+        );
+        assert!(
+            state
+                .adjacent_history_context(
+                    &serde_json::json!({"view":"view", "path":"a", "position":"arbitrary"})
+                )
+                .is_err()
+        );
     }
 }

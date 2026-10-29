@@ -1,13 +1,16 @@
 //! File-bound comparisons keep readonly Git snapshots separate from native mutable document identities.
 use super::*;
+mod batch;
 mod cache;
 mod lifecycle;
 mod navigation;
+mod prefetch;
 pub(super) use cache::HistorySources;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod cache_tests;
 pub(super) use lifecycle::{Flight, is_diff_intent};
 pub(super) use navigation::HistoryNavigation;
+pub(super) use prefetch::HistoryPrefetch;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod lifecycle_tests;
 
@@ -20,9 +23,9 @@ impl State {
         self.diff_path = path.into();
         self.diff_history = false;
         self.diff_title = format!(
-            "{} · {}",
-            short_title(path),
-            if staged { "index" } else { "worktree" }
+            "{}: {}",
+            self.label("仓库差异", "Repository Diff"),
+            short_title(path)
         );
         self.diff_key = format!(
             "{}-{}",
@@ -118,8 +121,15 @@ impl State {
         }
         Ok(())
     }
-    /// Refresh a still-live source; native view closure revokes it and the document event evicts it.
+    /// Refresh a still-live source; a close notification can trail the click that tries to reuse it.
+    /// A rejected cached refresh gets one ordinary fresh open, preserving host ownership checks.
     pub(super) fn open_diff_snapshot(&mut self, column: usize) -> Result<(), api::Failure> {
+        self.ensure_diff_observation()?;
+        let intent = match column {
+            0 => "diff-left",
+            1 => "diff-right",
+            _ => "diff-third",
+        };
         let source = self
             .diff_views
             .get(&self.diff_key)
@@ -128,10 +138,21 @@ impl State {
                 1 => sources.right.clone(),
                 _ => sources.third.clone(),
             });
+        if let Some(document) = source {
+            let text = self.diff_columns.get(column).cloned().unwrap_or_default();
+            match self.editor(
+                api::EditorOperation::RefreshVirtualDocument { document, text },
+                intent,
+            ) {
+                Ok(()) => return Ok(()),
+                Err(error) if lifecycle::expired_source(&error) => {
+                    self.forget_rejected_diff_source(column)
+                }
+                Err(error) => return Err(error),
+            }
+        }
         let text = self.diff_columns.get(column).cloned().unwrap_or_default();
-        let operation = if let Some(document) = source {
-            api::EditorOperation::RefreshVirtualDocument { document, text }
-        } else {
+        self.editor(
             api::EditorOperation::OpenVirtualSource {
                 title: format!(
                     "{} · {}",
@@ -151,15 +172,8 @@ impl State {
                 language: None,
                 language_path: Some(self.diff_path.clone()),
                 text,
-            }
-        };
-        self.editor(
-            operation,
-            match column {
-                0 => "diff-left",
-                1 => "diff-right",
-                _ => "diff-third",
             },
+            intent,
         )
     }
     /// Disable user-configured diff helpers and colors so Git emits a complete machine patch.
@@ -205,6 +219,8 @@ impl State {
     fn queue_history_sources(&mut self, path: &str) {
         self.columns = vec![String::new(); self.snapshot_targets.len()];
         self.snapshot_ready = 0;
+        let mut missing = Vec::new();
+        let mut input = Vec::new();
         for (column, oid) in self.snapshot_targets.iter().enumerate() {
             if oid.is_empty() {
                 self.snapshot_ready += 1;
@@ -218,16 +234,21 @@ impl State {
                 self.snapshot_ready += 1;
                 continue;
             }
-            self.queue.push_back(Command::new(
-                vec![
-                    "ls-tree".into(),
-                    "-z".into(),
-                    oid.clone(),
-                    "--".into(),
-                    path.into(),
-                ],
-                Purpose::HistoryBlob { column },
-            ));
+            missing.push(column);
+            input.extend_from_slice(format!("{oid}:{path}\0").as_bytes());
+        }
+        if !missing.is_empty() {
+            // NUL-delimited input preserves filenames containing newlines. Output uses Git's
+            // declared byte sizes, never line splitting of file contents or missing path names.
+            let mut command = Command::new(
+                ["cat-file", "--batch", "-z"],
+                Purpose::HistoryBatch {
+                    columns: missing,
+                    path: path.into(),
+                },
+            );
+            command.input = Some(input);
+            self.queue.push_back(command);
         }
     }
 
@@ -241,7 +262,7 @@ impl State {
         }
         self.diff_navigation = HistoryNavigation::capture(
             self.snapshot_targets.clone(),
-            self.history_files.clone(),
+            self.history_navigation_files(),
             path,
         );
         self.start_history_diff(path)
@@ -254,9 +275,9 @@ impl State {
             trees::node_id(&format!("{}\0{}", self.snapshot_targets.join("\0"), path))
         );
         self.diff_title = format!(
-            "{} · {}",
-            short_title(path),
-            self.snapshot_targets[1].chars().take(8).collect::<String>()
+            "{}: {}",
+            self.label("仓库差异", "Repository Diff"),
+            short_title(path)
         );
         self.diff_path = path.into();
         self.begin_diff_flight(true);
