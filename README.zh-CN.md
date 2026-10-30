@@ -1,6 +1,8 @@
 # Git for Nanobug
 
-本地候选 0.1.51 使用统一可配置原生 `Editor` 契约（`ui.code_editor ^2`、`editor.layout ^2`），需要提供 `ui.canvas >=1.11`、`editor.virtual >=1.2`、`ui.tree >=1.9`、`editor.diff >=1.5` 与 `ui.interaction >=1.1` 的配套开发宿主；保留原内容、Undo/Redo 与插件数据。配套宿主版本固定在 `host-sdk.json`；本候选及其宿主提交尚未发布。
+候选 0.1.52 在重复选择同一文件时保留正在进行的加载；已打开的历史文件直接使用原有来源，不重复刷新正文。切换提交或合并父版本仍加载对应来源，过期的文档句柄通过正常宿主接口重新准备一次。权限和能力版本不变。
+
+本地候选 0.1.52 使用统一可配置原生 `Editor` 契约（`ui.code_editor ^2`、`editor.layout ^2`），需要提供 `ui.canvas >=1.11`、`editor.virtual >=1.2`、`ui.tree >=1.9`、`editor.diff >=1.5` 与 `ui.interaction >=1.1` 的配套开发宿主；保留原内容、Undo/Redo 与插件数据。公开 SDK 版本固定在 `host-sdk.json`，保留当前对比位置需要同时使用本轮宿主优化。本候选尚未发布。
 
 
 [English](README.md)
@@ -20,7 +22,7 @@ $nanobug = 'C:\Projects\RustProjects\Editor\target\debug\editor-app.exe'
 & $nanobug --plugin-package . --output C:\Projects\RustProjects\Editor\dist\git
 ```
 
-打包器同时调用 Cargo 构建 `native/`，并记录原生辅助程序产物的真实摘要。通过 Nanobug 插件管理器安装生成的 `git-0.1.51.zip`。使用已构建包不需要 Rust 或 Cargo；Git 需要已安装，并可由宿主现有工具解析机制找到。
+打包器同时调用 Cargo 构建 `native/`，并记录原生辅助程序产物的真实摘要。通过 Nanobug 插件管理器安装生成的 `git-0.1.52.zip`。使用已构建包不需要 Rust 或 Cargo；Git 需要已安装，并可由宿主现有工具解析机制找到。
 
 0.1.51 不再因无关文档观察重建 Git 面板，隐藏比较窗口不再重复发布大段正文。错误、警告和操作日志统一进入宿主消息管理，错误与警告使用宿主通知浮窗。此版本新增公开 `ui.interaction ^1.1` 能力及对应安装权限，Git 委托命令也声明同一权限；升级时需确认新增交互权限，保留已有数据和仓库权限。
 

@@ -11,6 +11,8 @@ struct Request {
 
 /// Sources become native-view-owned only after the final comparison receipt succeeds.
 pub(crate) struct Flight {
+    /// One stale cached comparison can reacquire its immutable sources through ordinary APIs.
+    pub(super) reused_comparison: bool,
     /// Immutable key captured before any asynchronous Git or native editor work.
     key: String,
     /// Errors for historical comparisons remain visible in their inline commit preview.
@@ -92,6 +94,27 @@ impl State {
         new_source: bool,
         error: &api::Failure,
     ) -> Result<bool, api::Failure> {
+        if intent == "compare"
+            && expired_source(error)
+            && self
+                .diff_flight
+                .as_ref()
+                .is_some_and(|flight| flight.reused_comparison)
+        {
+            self.diff_flight.as_mut().unwrap().reused_comparison = false;
+            for column in 0..3 {
+                self.forget_rejected_diff_source(column);
+            }
+            self.left_version = None;
+            self.right_version = None;
+            self.third_version = None;
+            self.diff_mode = Some(true);
+            self.diff_source_requested = false;
+            self.queue_history_sources(&self.diff_path.clone());
+            self.diff_columns = self.columns.clone();
+            self.maybe_start_diff()?;
+            return Ok(true);
+        }
         if new_source || self.diff_flight.is_none() || !expired_source(error) {
             return Ok(false);
         }
@@ -109,6 +132,7 @@ impl State {
     /// Capture an intent's existing cache before a new hidden source can replace any entry.
     pub(crate) fn begin_diff_flight(&mut self, history: bool) {
         self.diff_flight = Some(Flight {
+            reused_comparison: false,
             key: self.diff_key.clone(),
             history,
             previous: self.diff_views.get(&self.diff_key).cloned(),

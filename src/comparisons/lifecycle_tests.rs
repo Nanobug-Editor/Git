@@ -1,6 +1,133 @@
 //! Pure lifecycle regressions exercise cleanup authority without calling native WIT imports.
 use super::*;
 
+/// Clicking the currently loading file must keep its original native request and source receipt.
+#[test]
+fn repeated_history_file_selection_preserves_inflight_requests() {
+    let mut state = State {
+        selected: "commit".into(),
+        history_selection: Some(Commit {
+            oid: "commit".into(),
+            parents: vec!["parent".into()],
+            ..Default::default()
+        }),
+        history_files: vec!["file.rs".into()],
+        ..Default::default()
+    };
+    let selection = || panel_activity::ComparisonSelection::History {
+        oid: "commit".into(),
+        path: "file.rs".into(),
+    };
+    state.request_comparison(selection()).unwrap();
+    state.queue.clear();
+    state.snapshot_ready = 2;
+    state.diff_source_requested = true;
+    pending(&mut state, 10, "diff-left", true);
+    pending(&mut state, 11, "diff-right", true);
+    state.request_comparison(selection()).unwrap();
+    assert_eq!(
+        state.editor_tasks.len(),
+        2,
+        "the same click cancelled its own native source requests"
+    );
+    assert!(state.editor_tasks.contains_key(&10) && state.editor_tasks.contains_key(&11));
+    assert!(
+        state.queue.is_empty(),
+        "the same file was read from Git again"
+    );
+    assert!(state.pending_comparisons.is_empty());
+}
+
+/// A matching path is insufficient when the selected immutable commit or merge parent changes.
+#[test]
+fn history_selection_identity_includes_commit_and_parent_choices() {
+    for change_commit in [true, false] {
+        let mut state = State {
+            selected: "commit".into(),
+            history_selection: Some(Commit {
+                oid: "commit".into(),
+                parents: vec!["parent-a".into(), "parent-b".into()],
+                ..Default::default()
+            }),
+            history_files: vec!["file.rs".into()],
+            history_parents: [0, 1],
+            ..Default::default()
+        };
+        state
+            .request_comparison(panel_activity::ComparisonSelection::History {
+                oid: "commit".into(),
+                path: "file.rs".into(),
+            })
+            .unwrap();
+        let previous_key = state.diff_key.clone();
+        if change_commit {
+            state.selected = "other-commit".into();
+            state.history_selection.as_mut().unwrap().oid = state.selected.clone();
+        } else {
+            state.history_parents = [1, 0];
+        }
+        state
+            .request_comparison(panel_activity::ComparisonSelection::History {
+                oid: state.selected.clone(),
+                path: "file.rs".into(),
+            })
+            .unwrap();
+        assert_ne!(state.diff_key, previous_key);
+        assert_eq!(state.queue.len(), 1);
+        assert!(matches!(
+            state.queue[0].purpose,
+            Purpose::HistoryBatch { .. }
+        ));
+    }
+}
+
+/// A late source closure may invalidate cached capabilities; retry once with captured OIDs.
+#[test]
+fn retained_history_comparison_reacquires_expired_sources_once() {
+    let mut state = State {
+        diff_key: "history-key".into(),
+        diff_path: "file.rs".into(),
+        diff_history: true,
+        snapshot_targets: vec!["parent".into(), "commit".into()],
+        ..Default::default()
+    };
+    state.diff_views.insert(
+        state.diff_key.clone(),
+        DiffSources {
+            left: Some(source("left", 1, 100).document),
+            right: Some(source("right", 1, 101).document),
+            ..Default::default()
+        },
+    );
+    state.begin_diff_flight(true);
+    state.diff_flight.as_mut().unwrap().reused_comparison = true;
+    let timeout = api::Failure::new(api::ErrorCode::TimedOut, "timeout");
+    assert!(
+        !state
+            .renew_diff_snapshot("compare", false, &timeout)
+            .unwrap()
+    );
+    let closed = api::Failure::new(api::ErrorCode::StaleRevision, "closed");
+    assert!(
+        state
+            .renew_diff_snapshot("compare", false, &closed)
+            .unwrap()
+    );
+    assert!(
+        !state
+            .renew_diff_snapshot("compare", false, &closed)
+            .unwrap()
+    );
+    assert_eq!(state.queue.len(), 1);
+    assert_eq!(
+        state.queue[0].input.as_deref(),
+        Some(b"parent:file.rs\0commit:file.rs\0".as_slice())
+    );
+    let cached = &state.diff_views[&state.diff_key];
+    assert!(cached.left.is_none() && cached.right.is_none() && cached.third.is_none());
+    assert!(!state.diff_source_requested);
+}
+
 /// Capability IDs stay visibly distinct from native document identities in these state tests.
 fn handle(resource: u64) -> api::ResourceHandle {
     api::ResourceHandle {

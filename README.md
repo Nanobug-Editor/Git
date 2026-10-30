@@ -1,6 +1,8 @@
 # Git for Nanobug
 
-Local candidate 0.1.51 uses the configurable native `Editor` contract (`ui.code_editor ^2`, `editor.layout ^2`). It requires the matching development host, including `ui.canvas >=1.11`, `editor.virtual >=1.2`, `ui.tree >=1.9`, `editor.diff >=1.5` and `ui.interaction >=1.1`; content, Undo/Redo and existing plugin data are retained. The matching host revision is pinned in `host-sdk.json`; this candidate and its host commit have not been published.
+Candidate 0.1.52 keeps an in-flight comparison when the same file is selected again and reopens retained immutable history sources without refreshing their text. Commit and merge-parent changes still load distinct sources; expired capabilities reacquire once through the ordinary host APIs. Permissions and capability versions are unchanged.
+
+Local candidate 0.1.52 uses the configurable native `Editor` contract (`ui.code_editor ^2`, `editor.layout ^2`). It requires the matching development host, including `ui.canvas >=1.11`, `editor.virtual >=1.2`, `ui.tree >=1.9`, `editor.diff >=1.5` and `ui.interaction >=1.1`; content, Undo/Redo and existing plugin data are retained. The public SDK revision is pinned in `host-sdk.json`; the accompanying host optimization is needed to preserve the current comparison viewport. This candidate has not been published.
 
 
 [简体中文](README.zh-CN.md)
@@ -20,7 +22,7 @@ $nanobug = 'C:\Projects\RustProjects\Editor\target\debug\editor-app.exe'
 & $nanobug --plugin-package . --output C:\Projects\RustProjects\Editor\dist\git
 ```
 
-The package builder also builds `native/` with Cargo and records the native helper's actual artifact digest. Install the resulting `git-0.1.51.zip` through Nanobug's plugin manager. An installed package does not require Rust or Cargo. Git must already be available through the host's configured tool resolution.
+The package builder also builds `native/` with Cargo and records the native helper's actual artifact digest. Install the resulting `git-0.1.52.zip` through Nanobug's plugin manager. An installed package does not require Rust or Cargo. Git must already be available through the host's configured tool resolution.
 
 Version 0.1.51 avoids rebuilding Git panels for unrelated document observations and omits hidden comparison snapshots from UI publication. Diagnostics and operation logs now appear in the host message center; warnings and errors use host notifications. This update requires the public `ui.interaction ^1.1` capability and its installation permission, including the delegated Git commands. Existing data and repository permissions are retained; review the added interaction permission when upgrading.
 

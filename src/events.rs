@@ -538,43 +538,7 @@ impl State {
                     }
                     _ => {}
                 }
-                if (!self.diff_history
-                    || self.snapshot_targets.len() == 2
-                    || self.third_version.is_some())
-                    && let (Some(left), Some(right)) =
-                        (self.left_version.clone(), self.right_version.clone())
-                {
-                    publish = true;
-                    self.left_version = None;
-                    self.right_version = None;
-                    self.diff_mode = None;
-                    let third = self.third_version.take();
-                    self.editor(
-                        api::EditorOperation::OpenDocumentComparison {
-                            key: self.diff_key.clone(),
-                            title: self.diff_title.clone(),
-                            left,
-                            right,
-                            third,
-                            navigation: self.comparison_navigation(),
-                            initial_position: self.comparison_position(),
-                            // Artwork is packaged here; the public host mechanism owns only display folding.
-                            folding: Some(api::ComparisonFolding {
-                                collapse: ui::ToolIcon::new(
-                                    "icons/explorer-collapse-all.svg",
-                                    "icons/explorer-collapse-all.svg",
-                                ),
-                                expand: ui::ToolIcon::new(
-                                    "icons/explorer-expand-all.svg",
-                                    "icons/explorer-expand-all.svg",
-                                ),
-                                context_lines: 3,
-                            }),
-                            preview: true,
-                        },
-                        "compare",
-                    )?;
-                }
+                publish |= self.publish_prepared_comparison()?;
             }
             _ => {}
         }
