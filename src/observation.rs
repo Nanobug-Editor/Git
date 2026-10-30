@@ -13,22 +13,36 @@ pub(super) fn is_background_event(input: &api::Input) -> bool {
     )
 }
 
-/// Tree pages and terminal native receipts may finish alongside a read. Other native events
-/// preempt it before their current, already-admitted UI action reaches any busy guard.
+/// Only business input preempts optional reads. Layout, measurement and focus receipts describe
+/// native presentation; cancelling on those receipts can abandon a restored panel's first page.
+/// Focus, visibility and save observations coalesce through their ordinary event handlers.
 pub(super) fn interrupts(input: &api::Input) -> bool {
-    matches!(input, api::Input::Event { .. })
-        && !is_background_event(input)
-        && !matches!(
-            input,
-            api::Input::Event {
-                event: api::Notification::Request { .. }
-                    | api::Notification::Ui(ui::UiEvent {
-                        action: ui::Action::Tree(tree::Event::Request(_)),
-                        ..
-                    }),
-                ..
-            }
-        )
+    match input {
+        api::Input::Event {
+            event: api::Notification::Command { .. } | api::Notification::CommandInvocation(_),
+            ..
+        } => true,
+        api::Input::Event {
+            event: api::Notification::Ui(ui::UiEvent { action, .. }),
+            ..
+        } => !matches!(
+            action,
+            ui::Action::SplitResized(_)
+                | ui::Action::Tree(tree::Event::Request(_))
+                | ui::Action::Canvas(
+                    ui::CanvasEvent::Resize { .. }
+                        | ui::CanvasEvent::TextMeasured { .. }
+                        | ui::CanvasEvent::Focus { .. }
+                        | ui::CanvasEvent::Scroll { .. }
+                        | ui::CanvasEvent::ColumnsResized { .. }
+                        | ui::CanvasEvent::Pointer {
+                            phase: ui::PointerPhase::Move | ui::PointerPhase::Up,
+                            ..
+                        }
+                )
+        ),
+        _ => false,
+    }
 }
 
 impl State {
@@ -41,9 +55,19 @@ impl State {
         }
         self.automatic_observation = false;
         self.background_read = false;
-        self.queue.clear();
+        // Selected preview metadata is required work even when a background log page discovered
+        // it. Keep its current chain; cancelling it would leave an already published loading tree
+        // with no owner, and repeated row input must not restart a nearly completed immutable read.
+        let selected = self.selected.as_str();
+        let required = |purpose: &Purpose| matches!(purpose, Purpose::Files(oid) | Purpose::CommitMessage(oid) if oid == selected);
+        self.queue.retain(|command| required(&command.purpose));
         self.history_refresh = None;
-        if let Some(running) = self.running.take() {
+        if self
+            .running
+            .as_ref()
+            .is_some_and(|running| !required(&running.command.purpose))
+            && let Some(running) = self.running.take()
+        {
             api::guest::close_resource(running.handle)?;
         }
         self.conflict_lifecycle.cancel_observation();

@@ -7,7 +7,10 @@ mod isolation_tests;
 impl State {
     /// Keep the original revision whenever a panel's semantic document has not changed.
     /// Rendering another surface must not revoke its native clicks, form drafts or lazy pages.
-    pub(super) fn changed_views(&mut self, views: Vec<api::View>) -> Vec<api::View> {
+    pub(super) fn changed_views(&mut self, mut views: Vec<api::View>) -> Vec<api::View> {
+        for view in &mut views {
+            self.layout_preferences.decorate(&mut view.document);
+        }
         views
             .into_iter()
             .filter(|view| {

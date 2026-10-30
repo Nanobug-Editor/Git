@@ -237,22 +237,30 @@ impl State {
                 if self.selected != oid {
                     return Ok(());
                 }
+                // Returning to the same immutable OID can make an older message receipt match
+                // again after its paired files were cancelled. Only a complete current file map
+                // may enable the tree; the newly queued Files query will supply its own message.
+                let Some(files) = self.pending_history_files.take() else {
+                    return Ok(());
+                };
                 let message = history_preview::decode_message(running.output)?;
-                if let Some(files) = self.pending_history_files.take() {
-                    let paths = files.keys().cloned().collect();
-                    let previous_status = std::mem::replace(&mut self.history_file_status, files);
-                    let previous_files = std::mem::replace(&mut self.history_files, paths);
-                    // Admission can reject an oversized/invalid delta. Keep the last complete
-                    // preview in that case, matching the host's atomic preservation of its tree.
-                    if let Err(error) = self.reconcile_tree("files") {
-                        self.history_file_status = previous_status;
-                        self.history_files = previous_files;
-                        return Err(error);
-                    }
+                let paths = files.keys().cloned().collect();
+                let previous_status = std::mem::replace(&mut self.history_file_status, files);
+                let previous_files = std::mem::replace(&mut self.history_files, paths);
+                // Admission can reject an oversized/invalid delta. Keep the last complete
+                // preview in that case, matching the host's atomic preservation of its tree.
+                if let Err(error) = self.reconcile_tree("files") {
+                    self.history_file_status = previous_status;
+                    self.history_files = previous_files;
+                    return Err(error);
                 }
                 self.history_message = message;
                 self.history_preview_commit = self.history_commit().cloned();
                 self.history_loading = false;
+                // Startup may have discovered this selected commit during a silent observation.
+                // Its complete tree is already admitted: publish the matching enabled scene now,
+                // rather than waiting for another native event that a fully cached tree never sends.
+                self.automatic_observation = false;
                 self.cache_history_preview();
             }
             purpose @ (Purpose::Snapshot { .. } | Purpose::DiffSnapshot { .. }) => {
@@ -291,6 +299,9 @@ impl State {
                 }
                 self.snapshot_ready += 1;
                 self.maybe_start_diff()?;
+            }
+            Purpose::HistoryBatch { columns, path } => {
+                self.finish_history_batch(&columns, &path, &running.output)?;
             }
             Purpose::HistoryBlob { column } => {
                 if let Some(oid) = history_blob_identity(&running.output)? {

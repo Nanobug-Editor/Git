@@ -1,6 +1,28 @@
 //! Immutable historical side reuse is checked through the same queue and completion as real Git.
 use super::*;
 
+/// A cold two-sided comparison must cross the process boundary once, not once per lookup and blob.
+#[test]
+fn cold_history_comparison_batches_both_sides_in_one_process() {
+    let mut state = State {
+        selected: "commit".into(),
+        history_selection: Some(Commit {
+            oid: "commit".into(),
+            parents: vec!["parent".into()],
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    state.history_file("nested/file.rs");
+    assert_eq!(state.queue.len(), 1, "each side started its own Git lookup");
+    assert!(
+        state.queue[0]
+            .input
+            .as_ref()
+            .is_some_and(|input| { input == b"parent:nested/file.rs\0commit:nested/file.rs\0" })
+    );
+}
+
 /// Finish one selected historical side with literal Git output, without native source allocation.
 fn finish(state: &mut State, command: Command, output: &[u8]) -> Result<(), api::Failure> {
     state.finished(
@@ -32,13 +54,12 @@ fn historical_file_roundtrip_reuses_complete_blob_and_absent_sides() {
     };
     state.environment.workspace = "repo-a".into();
     state.history_file("file.rs");
-    let left = state.queue.pop_front().unwrap();
-    finish(&mut state, left, b"").unwrap();
-    let right = state.queue.pop_front().unwrap();
-    let tree = format!("100644 blob {}\tfile.rs\0", "a".repeat(40));
-    finish(&mut state, right, tree.as_bytes()).unwrap();
-    let blob = state.queue.pop_front().unwrap();
-    finish(&mut state, blob, b"fn main() {}\n").unwrap();
+    let batch = state.queue.pop_front().unwrap();
+    let output = format!(
+        "parent:file.rs missing\n{} blob 13\nfn main() {{}}\n\n",
+        "a".repeat(40)
+    );
+    finish(&mut state, batch, output.as_bytes()).unwrap();
     state.history_file("file.rs");
     assert!(
         state.queue.is_empty(),
@@ -49,7 +70,7 @@ fn historical_file_roundtrip_reuses_complete_blob_and_absent_sides() {
     state.history_file("file.rs");
     assert_eq!(
         state.queue.len(),
-        2,
+        1,
         "a source cache must belong to its repository"
     );
 }
@@ -94,14 +115,8 @@ fn rejected_historical_blob_requires_a_fresh_query() {
     };
     state.history_file("file.rs");
     let query = state.queue.pop_front().unwrap();
-    finish(
-        &mut state,
-        query,
-        format!("100644 blob {}\tfile.rs\0", "a".repeat(40)).as_bytes(),
-    )
-    .unwrap();
-    let blob = state.queue.pop_front().unwrap();
-    assert!(finish(&mut state, blob, b"not\0text").is_err());
+    let invalid = format!("{} blob 8\nnot\0text\n", "a".repeat(40));
+    assert!(finish(&mut state, query, invalid.as_bytes()).is_err());
     state.history_file("file.rs");
     assert_eq!(
         state.queue.len(),

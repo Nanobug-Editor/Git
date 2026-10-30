@@ -38,7 +38,8 @@ fn branch_switch_projects_known_ancestry_and_keeps_every_control_usable() {
     assert_eq!(
         state
             .queue
-            .front()
+            .iter()
+            .find(|command| matches!(command.purpose, Purpose::Log { .. }))
             .unwrap()
             .args
             .iter()

@@ -116,7 +116,7 @@ dependencies = [
 
 [[package]]
 name = "git-guest"
-version = "0.1.46"
+version = "0.1.49"
 dependencies = [
  "plugin-protocol",
  "serde",

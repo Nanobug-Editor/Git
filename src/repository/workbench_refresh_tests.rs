@@ -198,6 +198,9 @@ fn commit_preview_keeps_files_and_message_until_both_new_receipts_are_ready() {
         "loading cannot replace the admitted native file tree"
     );
     assert!(find_node(&before, "history-files-loading").is_none());
+    // This pure metadata test uses a synthetic handle only to inspect the retained scene. Native
+    // admission and late replies are exercised against a real TreeResource by runtime tests.
+    state.trees.remove("files");
     let command = state.queue.pop_front().unwrap();
     state
         .finished(
@@ -272,4 +275,69 @@ fn rejected_preview_patch_keeps_last_complete_files_and_message() {
     assert_eq!(state.history_file_status["old.txt"], HistoryChange::Added);
     assert_eq!(state.history_message, "old complete message");
     assert_eq!(state.history_preview_commit.unwrap().oid, repository[0].oid);
+}
+
+/// Re-clicking the same immutable commit must not multiply pending reads or reset comparison parents.
+#[test]
+fn repeated_commit_selection_keeps_pending_or_complete_preview() {
+    let repository = commits();
+    let mut state = workbench();
+    state.commits = repository[..2].to_vec();
+    assert!(state.select_history_row(0, false));
+    assert_eq!(state.queue.len(), 1);
+    state.history_parents = [1, 0];
+    assert!(!state.select_history_row(0, false));
+    assert_eq!(state.queue.len(), 1);
+    assert_eq!(state.history_parents, [1, 0]);
+    state.queue.clear();
+    state.history_loading = false;
+    state.history_preview_commit = Some(repository[0].clone());
+    assert!(!state.select_history_row(0, false));
+    assert!(state.queue.is_empty());
+    assert_eq!(state.history_parents, [1, 0]);
+}
+
+/// Real pointer input retains the active read; only queued obsolete metadata yields to a new row.
+#[test]
+fn history_pointer_selection_deduplicates_pending_reads_and_prioritizes_latest_commit() {
+    let mut state = workbench();
+    state.commits = commits()[..3].to_vec();
+    let click = |state: &mut State, row: usize| {
+        state.history_canvas(ui::CanvasEvent::Pointer {
+            phase: ui::PointerPhase::Down,
+            x: 50.,
+            y: row as f32 * 28. + 1.,
+            button: 0,
+            shift: false,
+            clicks: 1,
+        })
+    };
+    assert!(click(&mut state, 0));
+    let first = state.queue.pop_front().unwrap();
+    state.running = Some(Running {
+        handle: handle(),
+        command: first,
+        output: Vec::new(),
+        stderr: Vec::new(),
+    });
+    state.history_parents = [1, 0];
+    assert!(!click(&mut state, 0));
+    assert!(
+        state.running.is_some(),
+        "same-row click cannot close the active readonly child"
+    );
+    assert!(state.queue.is_empty());
+    assert_eq!(state.history_parents, [1, 0]);
+    assert!(click(&mut state, 1));
+    assert!(click(&mut state, 2));
+    assert_eq!(
+        state.queue.len(),
+        1,
+        "unstarted obsolete metadata must not queue behind each click"
+    );
+    assert!(matches!(&state.queue[0].purpose, Purpose::Files(oid) if oid == &state.commits[2].oid));
+    assert!(
+        state.running.is_some(),
+        "new selection does not interrupt the already running read"
+    );
 }
