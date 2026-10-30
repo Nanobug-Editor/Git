@@ -22,7 +22,7 @@
       "ui.code_editor": "^2",
       "ui.visibility": "^1",
       "editor.actions": "^1",
-      "ui.native": ">=1.2,<2",
+      "ui.native": ">=1.3,<2",
       "ui.styles": "^1",
       "ui.panels": ">=1.2,<2",
       "ui.tree": ">=1.9,<2",

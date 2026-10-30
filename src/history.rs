@@ -45,6 +45,7 @@ impl State {
             {
                 self.history_columns.finish();
                 self.history_columns.trailing = Some([widths[1], widths[2], widths[3]]);
+                self.save_layout_columns();
                 true
             }
             ui::CanvasEvent::TextMeasured { widths } => self.history_columns.content.accept(widths),
@@ -84,11 +85,16 @@ impl State {
                 let changed = self.history_columns.move_to(x);
                 if matches!(phase, ui::PointerPhase::Up) {
                     self.history_columns.finish();
+                    self.save_layout_columns();
                 }
                 changed
             }
             ui::CanvasEvent::Focus { focused: false } => {
+                let dragged = self.history_columns.dragging();
                 self.history_columns.finish();
+                if dragged {
+                    self.save_layout_columns();
+                }
                 false
             }
             ui::CanvasEvent::Key {

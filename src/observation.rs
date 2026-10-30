@@ -27,7 +27,8 @@ pub(super) fn interrupts(input: &api::Input) -> bool {
             ..
         } => !matches!(
             action,
-            ui::Action::Tree(tree::Event::Request(_))
+            ui::Action::SplitResized(_)
+                | ui::Action::Tree(tree::Event::Request(_))
                 | ui::Action::Canvas(
                     ui::CanvasEvent::Resize { .. }
                         | ui::CanvasEvent::TextMeasured { .. }

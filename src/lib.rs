@@ -12,6 +12,7 @@ mod history;
 #[cfg(test)]
 mod history_dispatch_tests;
 mod history_preview;
+mod layout;
 mod lifecycle;
 mod merge;
 mod model;
@@ -53,6 +54,8 @@ const BACKGROUND_REFRESH_MS: u32 = 30_000;
 /// Derived repository views never become a second editable document or Undo stack.
 #[derive(Default)]
 struct State {
+    /// Durable workspace layout is independent of hot-update snapshots and repository queries.
+    layout_preferences: layout::Preferences,
     /// Workspace presentation and recent checkout metadata stay independent of history selection.
     workspace_ui: workspace_ui::WorkspaceUi,
     environment: Environment,

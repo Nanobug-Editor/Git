@@ -2,7 +2,7 @@
 
 Candidate 0.1.52 keeps an in-flight comparison when the same file is selected again and reopens retained immutable history sources without refreshing their text. Commit and merge-parent changes still load distinct sources; expired capabilities reacquire once through the ordinary host APIs. Permissions and capability versions are unchanged.
 
-Local candidate 0.1.52 uses the configurable native `Editor` contract (`ui.code_editor ^2`, `editor.layout ^2`). It requires the matching development host, including `ui.canvas >=1.11`, `editor.virtual >=1.2`, `ui.tree >=1.9`, `editor.diff >=1.5` and `ui.interaction >=1.1`; content, Undo/Redo and existing plugin data are retained. The public SDK revision is pinned in `host-sdk.json`; the accompanying host optimization is needed to preserve the current comparison viewport. This candidate has not been published.
+Local candidate 0.1.52 uses the configurable native `Editor` contract (`ui.code_editor ^2`, `editor.layout ^2`). It requires the matching development host, including `ui.native >=1.3`, `ui.canvas >=1.11`, `editor.virtual >=1.2`, `ui.tree >=1.9`, `editor.diff >=1.5` and `ui.interaction >=1.1`; content, Undo/Redo and existing plugin data are retained. The public SDK revision is pinned in `host-sdk.json`; the accompanying host optimization is needed to preserve the current comparison viewport. This candidate has not been published.
 
 
 [简体中文](README.zh-CN.md)
@@ -27,6 +27,8 @@ The package builder also builds `native/` with Cargo and records the native help
 Version 0.1.51 avoids rebuilding Git panels for unrelated document observations and omits hidden comparison snapshots from UI publication. Diagnostics and operation logs now appear in the host message center; warnings and errors use host notifications. This update requires the public `ui.interaction ^1.1` capability and its installation permission, including the delegated Git commands. Existing data and repository permissions are retained; review the added interaction permission when upgrading.
 
 Version 0.1.50 prepares at most the previous and next historical file after the current comparison is visible and required work is idle. Reads use frozen commit IDs and the existing bounded content cache; user actions cancel them first. Failed, oversized or retired reads stay silent and do not retry automatically. Prefetching neither opens tabs nor changes file selection, and worktree/index reads remain fresh. Host capabilities and installation permissions are unchanged.
+
+Version 0.1.49 stores internal split proportions and history text-column widths in private workspace preferences after a drag finishes. A cold host restart restores them before activating the workbench. Window resizing projects the saved proportions with native minimum sizes and does not overwrite them. Invalid records are preserved and reported while Git remains available.
 
 Version 0.1.48 publishes complete changed-file metadata before folder expansion, batches historical sides in one Git process, and follows the full tree order for adjacent-file navigation. Adjacent navigation reveals the matching file; a second difference-boundary gesture within two seconds opens the previous file at its end or the next file at its start. Repository-diff preview tabs use the standard tab appearance. Retired comparison sources are renewed through the ordinary ownership-checked API.
 

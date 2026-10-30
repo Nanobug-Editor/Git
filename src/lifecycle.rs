@@ -18,6 +18,10 @@ impl State {
     /// Start one observer pair and reuse existing data/trees on repeated activation.
     /// Failed observer acquisition closes earlier resources without hiding the acquisition error.
     pub(super) fn activate(&mut self) -> Result<(), api::Failure> {
+        // Corrupt/unavailable presentation preferences cannot disable repository operations.
+        if let Err(error) = self.load_layout_preferences() {
+            self.history_error = format!("布局恢复失败 / Layout could not be restored: {error}");
+        }
         self.start_background_resources()?;
         self.activate_workbench().map_err(|mut error| {
             // A later data/tree failure also ends this initialization's observation. Keep the

@@ -8,6 +8,9 @@ impl State {
         panel: Option<&str>,
         event: ui::UiEvent,
     ) -> Result<(), api::Failure> {
+        if self.layout_split_event(panel, &event)? {
+            return Ok(());
+        }
         // Local composer controls have no ownership of another panel's readonly work.
         if (panel == Some("staging") || (panel.is_none() && event.node.starts_with("commit-")))
             && self.commit_panel_event(&event)?
