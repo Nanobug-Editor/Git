@@ -5,6 +5,7 @@ mod cache;
 mod lifecycle;
 mod navigation;
 mod prefetch;
+mod reuse;
 pub(super) use cache::HistorySources;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod cache_tests;
@@ -196,11 +197,18 @@ impl State {
     pub(super) fn history_file(&mut self, path: &str) {
         self.history_path = path.into();
         self.columns.clear();
-        self.snapshot_targets.clear();
+        self.snapshot_targets = self.history_snapshot_targets();
+        if !self.snapshot_targets.is_empty() {
+            self.queue_history_sources(path);
+        }
+    }
+
+    /// Capture ordered immutable sides without starting reads or changing the selected source.
+    pub(super) fn history_snapshot_targets(&self) -> Vec<String> {
         let Some(commit) = self.history_commit() else {
-            return;
+            return Vec::new();
         };
-        self.snapshot_targets = if commit.parents.len() > 1 {
+        if commit.parents.len() > 1 {
             vec![
                 commit.parents[self.history_parents[0].min(commit.parents.len() - 1)].clone(),
                 commit.oid.clone(),
@@ -211,8 +219,7 @@ impl State {
                 commit.parents.first().cloned().unwrap_or_default(),
                 commit.oid.clone(),
             ]
-        };
-        self.queue_history_sources(path);
+        }
     }
 
     /// Read only captured OIDs; later log/parent selection cannot retarget an in-flight file.
@@ -270,10 +277,7 @@ impl State {
 
     /// The original file click and adjacent-file arrows share one source/receipt lifecycle.
     fn start_history_diff(&mut self, path: &str) -> Result<(), api::Failure> {
-        self.diff_key = format!(
-            "history-{}",
-            trees::node_id(&format!("{}\0{}", self.snapshot_targets.join("\0"), path))
-        );
+        self.diff_key = history_key(&self.snapshot_targets, path);
         self.diff_title = format!(
             "{}: {}",
             self.label("仓库差异", "Repository Diff"),
@@ -289,8 +293,19 @@ impl State {
         self.right_version = None;
         self.third_version = None;
         self.history_error.clear();
+        if self.try_reuse_history_comparison()? {
+            return Ok(());
+        }
         self.maybe_start_diff()
     }
+}
+
+/// Ordered parent/result identities distinguish the same filename across commits and merge sides.
+pub(super) fn history_key(targets: &[String], path: &str) -> String {
+    format!(
+        "history-{}",
+        trees::node_id(&format!("{}\0{}", targets.join("\0"), path))
+    )
 }
 
 /// Bound display titles by UTF-8 bytes as well as characters; paths and Git arguments retain all bytes.

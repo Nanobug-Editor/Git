@@ -1,7 +1,7 @@
 {
   "id": "git",
   "name": "Git",
-  "version": "0.1.51",
+  "version": "0.1.52",
   "protocol": 7,
   "component": "git.wasm",
   "permissions": ["process.exec", "process.service.rebase", "dependencies.prepare", "ui.panels", "ui.interaction", "assets.read", "editor.read", "editor.write", "workspace.read", "workspace.write", "storage"],

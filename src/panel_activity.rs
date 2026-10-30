@@ -157,6 +157,27 @@ impl State {
         selection: ComparisonSelection,
     ) -> Result<(), api::Failure> {
         let history = selection.history();
+        // Repeated input keeps the exact running source requests. It still supersedes an older
+        // queued choice on this surface, while another commit/parent/index side remains distinct.
+        let key = match &selection {
+            ComparisonSelection::History { oid, path } if *oid == self.selected => Some(
+                comparisons::history_key(&self.history_snapshot_targets(), path),
+            ),
+            ComparisonSelection::Worktree { path, staged } => Some(format!(
+                "{}-{}",
+                if *staged { "index" } else { "worktree" },
+                trees::node_id(path)
+            )),
+            ComparisonSelection::Adjacent { path, context, .. } => {
+                Some(context.comparison_key(path))
+            }
+            _ => None,
+        };
+        if self.diff_flight.is_some() && key.as_ref() == Some(&self.diff_key) {
+            self.pending_comparisons
+                .retain(|old| old.history() != history);
+            return Ok(());
+        }
         if history && self.history_comparison_only() {
             // Tree clicks and toolbar arrows share latest-selection semantics. Cancel only this
             // readonly flight, preserving unrelated writes and the sibling commit surface.

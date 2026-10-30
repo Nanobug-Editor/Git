@@ -16,6 +16,10 @@ pub(crate) struct HistoryNavigation {
 }
 
 impl HistoryNavigation {
+    /// The captured sequence, rather than the moving history selection, identifies an arrow target.
+    pub(crate) fn comparison_key(&self, path: &str) -> String {
+        super::history_key(&self.targets, path)
+    }
     /// Only the next and previous immutable neighbors may be prepared after visible admission.
     pub(super) fn neighboring_sources(&self) -> impl Iterator<Item = (&[String], &str)> {
         self.index
