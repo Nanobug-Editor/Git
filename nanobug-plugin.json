@@ -5,6 +5,9 @@
   "native": [{"program":"cargo","platform":"windows-x86_64","args":["build","--manifest-path","{project}/native/Cargo.toml","--target-dir","{build}/native","--release"]}],
   "assets": [
     {"source":"{build}/native/release/nanobug-git-rebase.exe","destination":"native/nanobug-git-rebase.exe","platform":"windows-x86_64"},
-    {"source":"icons","destination":"icons"}
+    {"source":"icons","destination":"icons"},
+    {"source":"README.md","destination":"README.md"},
+    {"source":"README.zh-CN.md","destination":"README.zh-CN.md"},
+    {"source":"LICENSE","destination":"LICENSE"}
   ]
 }

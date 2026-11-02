@@ -1,17 +1,17 @@
 # Git for Nanobug
 
-Version **0.1.53** targets the Nanobug internal-test build of 2026-11-02 through the public host SDK. Installation IDs and permissions are preserved. Windows native helpers included in this package use a statically linked runtime.
+Version **0.1.54** targets the Nanobug internal-test build of 2026-11-02 through the public host SDK. Installation IDs and permissions are preserved. Windows native helpers included in this package use a statically linked runtime.
 
 Candidate 0.1.52 keeps an in-flight comparison when the same file is selected again and reopens retained immutable history sources without refreshing their text. Commit and merge-parent changes still load distinct sources; expired capabilities reacquire once through the ordinary host APIs. Permissions and capability versions are unchanged.
 
-Local candidate 0.1.52 uses the configurable native `Editor` contract (`ui.code_editor ^2`, `editor.layout ^2`). It requires the matching development host, including `ui.native >=1.3`, `ui.canvas >=1.11`, `editor.virtual >=1.2`, `ui.tree >=1.9`, `editor.diff >=1.5` and `ui.interaction >=1.1`; content, Undo/Redo and existing plugin data are retained. The public SDK revision is pinned in `host-sdk.json`; the accompanying host optimization is needed to preserve the current comparison viewport. This candidate has not been published.
+Local candidate 0.1.52 uses the configurable native `Editor` contract (`ui.code_editor ^2`, `editor.layout ^2`). It requires the matching development host, including `ui.native >=1.3`, `ui.canvas >=1.11`, `editor.virtual >=1.2`, `ui.tree >=1.9`, `editor.diff >=1.5` and `ui.interaction >=1.1`; content, Undo/Redo and existing plugin data are retained. The public SDK revision is pinned in `host-sdk.json`; the accompanying host optimization is needed to preserve the current comparison viewport. Release artifacts are published independently; marketplace admission uses a reviewed registry record.
 
 
 [简体中文](README.zh-CN.md)
 
 A native Git workbench for Nanobug, delivered as an independent WASM plugin. The left panel contains the staging tree and commit form; the bottom panel contains branch trees, a paged commit graph and an inline commit preview. File comparisons stay in main-editor tabs. Conflict resolution opens a separate native window.
 
-This is an initial development candidate. It requires the matching Nanobug host changes, including `ui.code_editor` 2.0 and `ui.interaction` 1.1; it has not been published to the marketplace. Comparisons use display-only blank-row alignment over the original native editor sessions. Bounded layout failures fall back explicitly to independent panes; native search/code-action panels pause alignment until closed.
+This plugin requires the matching Nanobug host changes, including `ui.code_editor` 2.0 and `ui.interaction` 1.1; marketplace versions use reviewed registry records. Comparisons use display-only blank-row alignment over the original native editor sessions. Bounded layout failures fall back explicitly to independent panes; native search/code-action panels pause alignment until closed.
 
 ## Build
 
@@ -115,3 +115,7 @@ Version 0.1.15 requires `ui.tree >=1.2` in the matching host. Selecting branches
 The plugin supports file and hunk staging, branches, fetch/pull/push, stash, merge, reset, cherry-pick and bounded interactive rebase plans. Interactive rebase supports reorder, reword, squash, fixup and drop; it does not accept arbitrary `exec` commands or reconstruct merge topology. Destructive operations show a preview and require an explicit action. Published-history updates use an explicit expected remote OID with force-with-lease.
 
 Binary and non-UTF-8 conflicts use explicit whole-version choices. Oversized comparisons and plans show their limits rather than applying truncated content. Closing a conflict window keeps the native result document and its Undo history; it does not abort the Git operation. Review `docs/plugins/specs/git-plugin.md` and the verification record in the host checkout for the agreed scope and actual validation status.
+
+## License
+
+The source and package use the MIT license declared in Cargo.toml; see [LICENSE](LICENSE).

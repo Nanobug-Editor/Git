@@ -1,17 +1,17 @@
 # Git for Nanobug
 
-版本 **0.1.53** 面向 2026-11-02 的 Nanobug 内部测试版，使用公开宿主 SDK 构建。保留安装 ID 和权限；包内附带的 Windows 原生辅助程序使用静态运行库。
+版本 **0.1.54** 面向 2026-11-02 的 Nanobug 内部测试版，使用公开宿主 SDK 构建。保留安装 ID 和权限；包内附带的 Windows 原生辅助程序使用静态运行库。
 
 候选 0.1.52 在重复选择同一文件时保留正在进行的加载；已打开的历史文件直接使用原有来源，不重复刷新正文。切换提交或合并父版本仍加载对应来源，过期的文档句柄通过正常宿主接口重新准备一次。权限和能力版本不变。
 
-本地候选 0.1.52 使用统一可配置原生 `Editor` 契约（`ui.code_editor ^2`、`editor.layout ^2`），需要提供 `ui.native >=1.3`、`ui.canvas >=1.11`、`editor.virtual >=1.2`、`ui.tree >=1.9`、`editor.diff >=1.5` 与 `ui.interaction >=1.1` 的配套开发宿主；保留原内容、Undo/Redo 与插件数据。公开 SDK 版本固定在 `host-sdk.json`，保留当前对比位置需要同时使用本轮宿主优化。本候选尚未发布。
+本地候选 0.1.52 使用统一可配置原生 `Editor` 契约（`ui.code_editor ^2`、`editor.layout ^2`），需要提供 `ui.native >=1.3`、`ui.canvas >=1.11`、`editor.virtual >=1.2`、`ui.tree >=1.9`、`editor.diff >=1.5` 与 `ui.interaction >=1.1` 的配套开发宿主；保留原内容、Undo/Redo 与插件数据。公开 SDK 版本固定在 `host-sdk.json`，保留当前对比位置需要同时使用本轮宿主优化。Release 独立发布，市场版本通过注册表审核收录。
 
 
 [English](README.md)
 
 Nanobug 的独立 WASM Git 插件，使用原生界面。左侧为暂存文件树和提交表单，底部为分支树、分页提交拓扑及提交预览。文件比较保留在主编辑区；冲突处理使用独立原生窗口。
 
-当前是初始开发候选包，需要配套的 Nanobug 宿主改动（含 `ui.code_editor` 2.0 与 `ui.interaction` 1.1），尚未发布到市场。比较使用显示层补白，原生编辑会话保留文本与撤销状态。超过布局预算时明确降级为独立滚动；打开原生搜索或代码操作面板时暂停整组对齐，关闭后恢复。
+本插件需要配套的 Nanobug 宿主能力（含 `ui.code_editor` 2.0 与 `ui.interaction` 1.1）；市场版本通过注册表审核收录。比较使用显示层补白，原生编辑会话保留文本与撤销状态。超过布局预算时明确降级为独立滚动；打开原生搜索或代码操作面板时暂停整组对齐，关闭后恢复。
 
 ## 构建
 
@@ -115,3 +115,7 @@ Git 面板显示分支树、提交行和右侧提交预览。预览上方是改�
 支持整文件与差异块暂存、分支、Fetch／Pull／Push、Stash、Merge、Reset、Cherry-pick 和有界的交互式 Rebase。交互式变基支持重排、改说明、Squash、Fixup、Drop，不接受任意 `exec`，不重建合并拓扑。破坏性操作先展示预览，再由用户明确执行；更新已发布历史使用明确预期远程 OID 的 force-with-lease。
 
 二进制和非 UTF-8 冲突提供明确的整版本选择；超出比较或计划上限时显示限制，不应用截断内容。关闭冲突窗口保留原生结果文档及 Undo，不隐式中止 Git 操作。已确认范围与实际验证状态见宿主仓库的 `docs/plugins/specs/git-plugin.md` 和对应验收记录。
+
+## 许可证
+
+源码和包采用 Cargo.toml 已声明的 MIT 许可证，见 [LICENSE](LICENSE)。
