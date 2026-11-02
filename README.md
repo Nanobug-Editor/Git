@@ -1,5 +1,7 @@
 # Git for Nanobug
 
+Version **0.1.53** targets the Nanobug internal-test build of 2026-11-02 through the public host SDK. Installation IDs and permissions are preserved. Windows native helpers included in this package use a statically linked runtime.
+
 Candidate 0.1.52 keeps an in-flight comparison when the same file is selected again and reopens retained immutable history sources without refreshing their text. Commit and merge-parent changes still load distinct sources; expired capabilities reacquire once through the ordinary host APIs. Permissions and capability versions are unchanged.
 
 Local candidate 0.1.52 uses the configurable native `Editor` contract (`ui.code_editor ^2`, `editor.layout ^2`). It requires the matching development host, including `ui.native >=1.3`, `ui.canvas >=1.11`, `editor.virtual >=1.2`, `ui.tree >=1.9`, `editor.diff >=1.5` and `ui.interaction >=1.1`; content, Undo/Redo and existing plugin data are retained. The public SDK revision is pinned in `host-sdk.json`; the accompanying host optimization is needed to preserve the current comparison viewport. This candidate has not been published.
